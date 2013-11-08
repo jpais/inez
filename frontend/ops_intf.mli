@@ -15,16 +15,9 @@ module type Prop = sig
 
   (* pseudo-quantifiers *)
 
-  val forall :
-    'a list -> f:('a -> 'b t) -> 'b t
-  val forall2 :
-    'a list -> 'b list -> f:('a -> 'b -> 'c t) -> 'c t option
-  val forall_pairs :
-    'a list -> f:('a -> 'a -> 'b t) -> 'b t
-  val exists :
-    'a list -> f:('a -> 'b t) -> 'b t
-  val exists2 :
-    'a list -> 'b list -> f:('a -> 'b -> 'c t) -> 'c t option
+  val forall : 'a list -> f:('a -> 'b t) -> 'b t
+  val forall_pairs : 'a list -> f:('a -> 'a -> 'b t) -> 'b t
+  val exists : 'a list -> f:('a -> 'b t) -> 'b t
 
 end
 
@@ -46,6 +39,27 @@ module type Int = sig
   val sum : 'a list -> f:('a -> ('c, int) t) -> ('c, int) t
 
 end
+
+module type Float = sig
+   
+    type (_,_) t
+    type float_plug
+
+    val ( ~-. ) : ('i, float) t -> ('i, float) t
+
+    (* infix operators *)
+
+    val ( +. ) : ('i, float) t -> ('i, float) t -> ('i, float) t
+    val ( *. ) : float_plug -> ('i, float) t -> ('i, float) t
+    val ( -. ) : ('i, float) t -> ('i, float) t -> ('i, float) t
+
+    (* pseudo-quantifiers *)
+
+    val sumf : 'a list -> f:('a -> ('c, float) t) -> ('c, float) t
+
+end
+
+
 
 module type Mixed = sig
 
@@ -76,8 +90,29 @@ module type Mixed = sig
 
 end
 
+module type MixedF = sig
+
+    type (_,_) t
+
+    type _ atomf_plug
+
+    type _ formulaf_plug
+
+    val iitef : 'i atomf_plug formulaf_plug ->
+       ('i, float) t -> ('i, float) t -> ('i, float) t
+
+    val (<.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+    val (<=.) : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+    val (=.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+    val (>=.) : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+    val (>.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+
+end
+
 module type All = sig
   include Mixed
+  include MixedF with type ('i, 's) t := ('i, 's) t
   include Int with type ('i, 's) t := ('i, 's) t
+  include Float with type ('i,'s) t := ('i, 's) t
   include Prop with type 'i t := 'i formula_plug
 end

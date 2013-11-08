@@ -22,23 +22,29 @@ module Make (I : Id.Accessors) = struct
     raise (Unreachable.Exn _here_)
 
   type ibflat =
-    (term, formula) Terminology.ibeither
+    (term, formula) Terminology.ibeither (*Should change this type to be (float, bool)??*)
 
   (* Some of the definitions below look pedantic, but the
      corresponding compare_* functions are useful. *)
 
-  and args = ibflat list
+  and args =
+    ibflat list
 
-  and app = fun_id * args
+  and app =
+    fun_id * args
 
-  and sumt = Int63.t * term_base
+  and sumt =
+    Int63.t * term_base
 
-  and sum = sumt list
+  and sum =
+    sumt list
 
-  and iite = formula * term * term
+  and iite =
+    formula * term * term
 
   and term_base =
   | B_Var      of  (I.c, int) Id.t
+  | B_VarF     of  (I.c, float) Id.t
   | B_Formula  of  formula
   | B_App      of  app
   | B_Ite      of  iite
@@ -129,10 +135,11 @@ module Make (I : Id.Accessors) = struct
 
   type ctx = {
 
-    (* Tables to memoize top-level calls. This is to avoid translating
+    (* Tables to memorize top-level calls. This is to avoid translating
        the same terms/formulas multiple times. *)
 
     r_imemo_h  :  ((I.c, int) M.t, term) Hashtbl.Poly.t;
+    r_flmemo_h :  ((I.c, float) M.t, term) Hashtbl.Poly.t;
     r_bmemo_h  :  ((I.c, bool) M.t, formula) Hashtbl.Poly.t;
     r_fmemo_h  :  (I.c A.t Formula.t, formula) Hashtbl.Poly.t;
 
@@ -149,10 +156,11 @@ module Make (I : Id.Accessors) = struct
   }
 
   let make_ctx () = {
-    r_imemo_h = Hashtbl.Poly.create () ~size:4096;
-    r_bmemo_h = Hashtbl.Poly.create () ~size:4096;
-    r_fmemo_h = Hashtbl.Poly.create () ~size:4096;
-    r_sharing = make_sharing_ctx ();
+    r_imemo_h  = Hashtbl.Poly.create () ~size:4096;
+    r_flmemo_h = Hashtbl.Poly.create () ~size:4096; 
+    r_bmemo_h  = Hashtbl.Poly.create () ~size:4096;
+    r_fmemo_h  = Hashtbl.Poly.create () ~size:4096;
+    r_sharing  = make_sharing_ctx ();
   }
 
   (* we will expand-out ITE right before blasting *)
@@ -383,12 +391,19 @@ module Make (I : Id.Accessors) = struct
     Hashtbl.find_or_add r_bmemo_h s
       ~default:(fun () -> flatten_bool_term_aux r s)
 
+  and flatten_float_term ({r_flmemo_h} as r) s =
+    Hashtbl.find_or_add r_flmemo_h s
+      ~default:(fun () -> flatten_float_term_aux r s) 
+
+
   and flatten_term :
   type s . ctx -> (I.c, s) M.t -> ibflat =
     fun r t ->
       match M.type_of_t t ~f:I.type_of_t' with
       | Type.Y_Int ->
         H_Int (flatten_int_term r t)
+      | Type.Y_Float ->
+        H_Float (flatten_float_term r t)   (* TODO *)
       | Type.Y_Bool ->
         H_Bool (flatten_bool_term r t)
       | _ ->
@@ -455,23 +470,13 @@ module Make (I : Id.Accessors) = struct
     | Formula.F_Atom (A.A_Bool t) ->
       flatten_bool_term r t
     | Formula.F_Atom (A.A_Le t) ->
-      (match flatten_int_term r t with
-      | G_Sum ([], o) ->
-        if Int63.(o <= zero) then
-          true_formula
-        else
-          false_formula
-      | i ->
-        U_Atom (i, O'_Le))
+      U_Atom (flatten_int_term r t, O'_Le)
+    | Formula.F_Atom (A.A_LeF t) ->
+      U_Atom (flatten_int_term r t, O'_Le) (*TODO: Case undefined*)
     | Formula.F_Atom (A.A_Eq t) ->
-      (match flatten_int_term r t with
-      | G_Sum ([], o) ->
-        if Int63.(compare o zero) = 0 then
-          true_formula
-        else
-          false_formula
-      | i ->
-        U_Atom (i, O'_Eq))
+      U_Atom (flatten_int_term r t, O'_Eq)
+    | Formula.F_Atom (A.A_EqF t) ->
+      U_Atom (flatten_float_int_term r t, O'_Eq)  (*TODO: Case undefined*)
     | Formula.F_Not g ->
       negate (flatten_formula r g)
     | Formula.F_Ite (q, g, h) ->

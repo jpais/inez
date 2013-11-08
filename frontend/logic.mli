@@ -1,3 +1,8 @@
+
+module Make_term (T : Core.T.T1) :
+  (Logic_intf.Term_with_ops with type 'i atom = 'i T.t)
+ 
+
 (* atomic formulas *)
 
 module rec A : (Logic_intf.Atom
@@ -6,23 +11,7 @@ module rec A : (Logic_intf.Atom
 and M : (Logic_intf.Term_with_ops
          with type 'i atom = 'i A.t)
 
-(* boxed terms *)
-
-module Box : Box_intf.T2 with type ('i, 's) b := ('i, 's) M.t
-
-(* mostly infix operators; that's the module "logic in e" uses under
-   the hood *)
-
-module Ops :
-  (Ops_intf.All
-   with type ('i, 's) t := ('i, 's) M.t
-   and type 'i atom_plug := 'i A.t
-   and type 'a formula_plug := 'a Formula.t
-   and type int_plug := Core.Std.Int63.t)
-
-module Make_term (T : Core.T.T1) :
-  (Logic_intf.Term_with_ops with type 'i atom = 'i T.t)
-
+(* Conversor from Term to Term_with_ops *)
 module Make_term_conv
   
   (M1 : Logic_intf.Term)
@@ -47,3 +36,24 @@ sig
     ('c2, 's) M2.t
 
 end
+
+
+(* boxed terms *)
+
+module Box : Box_intf.T2 with type ('i, 's) b := ('i, 's) M.t
+
+(* mostly infix operators; that's the module "logic in e" uses under
+   the hood *)
+
+module Ops :
+  (Ops_intf.All
+   with type ('i, 's) t := ('i, 's) M.t
+   and type 'i atom_plug := 'i A.t
+   and type 'a formula_plug := 'a Formula.t
+   and type 'i atomf_plug := 'i A.t
+   and type 'a formulaf_plug := 'a Formula.t
+   and type int_plug := Core.Std.Int63.t
+   and type float_plug := Core.Std.Float.t )
+  
+
+

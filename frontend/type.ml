@@ -1,7 +1,9 @@
 open Core.Std
 
-type ibtype = E_Int | E_Bool
+type ibtype = E_Int | E_Bool | E_Float (* Added E_Float*)
 with sexp
+
+(* Added cases for Y_Float and Y_Float_Arrow*)
 
 module U = struct
 
@@ -9,8 +11,10 @@ module U = struct
 
   type t =
   | Y_Int
+  | Y_Float
   | Y_Bool
   | Y_Int_Arrow   of t
+  | Y_Float_Arrow of t
   | Y_Bool_Arrow  of t
 
   with compare, sexp
@@ -21,8 +25,10 @@ module T = struct
 
   type _ t =
   | Y_Int         :  int t
+  | Y_Float       :  float t
   | Y_Bool        :  bool t
   | Y_Int_Arrow   :  'a t -> (int -> 'a) t
+  | Y_Float_Arrow :  'a t -> (float -> 'a) t
   | Y_Bool_Arrow  :  'a t -> (bool -> 'a) t
 
   let rec ungadt_t :
@@ -30,10 +36,14 @@ module T = struct
     function
     | Y_Int ->
       U.Y_Int
+    | Y_Float ->
+      U.Y_Float
     | Y_Bool ->
       U.Y_Bool
     | Y_Int_Arrow y ->
       U.Y_Int_Arrow (ungadt_t y)
+    | Y_Float_Arrow y -> 
+      U.Y_Float_Arrow (ungadt_t y)
     | Y_Bool_Arrow y ->
       U.Y_Bool_Arrow (ungadt_t y)
 
@@ -58,15 +68,24 @@ module T = struct
     | _ ->
       raise (Sexp.Of_sexp_error
                (Util.Exn ("bool_t_of_sexp", _here_), x))
+  
+  let float_t_of_sexp x =
+    match (U.t_of_sexp x) with
+    | U.Y_Float -> Y_Float
+    | _ -> raise (Sexp.Of_sexp_error (Util.Exn ("float_t_of_sexp", _here_),x))
 
   let count_arrows t =
     let rec ca_aux : type s . int -> s t -> int = fun acc -> function
       | Y_Int ->
         acc
+      | Y_Float -> 
+	acc
       | Y_Bool ->
         acc
       | Y_Int_Arrow y ->
         ca_aux (1 + acc) y
+      | Y_Float_Arrow y ->
+	ca_aux (1 + acc) y
       | Y_Bool_Arrow y ->
         ca_aux (1 + acc) y in
     ca_aux 0 t
@@ -78,13 +97,17 @@ module T = struct
       x
     | Y_Bool_Arrow x, Y_Bool ->
       x
+    | Y_Float_Arrow x, Y_Float ->
+      x
 
   let rec rightmost_ibtype_of_t :
   type s . s t -> ibtype =
     function
     | Y_Int -> E_Int
+    | Y_Float -> E_Float
     | Y_Bool -> E_Bool
     | Y_Int_Arrow y -> rightmost_ibtype_of_t y
+    | Y_Float_Arrow y -> rightmost_ibtype_of_t y
     | Y_Bool_Arrow y -> rightmost_ibtype_of_t y
 
 end
@@ -98,6 +121,8 @@ module Box = struct
   let t_of_ibtype = function
     | E_Int ->
       Box Y_Int
+    | E_Float ->
+      Box Y_Float 
     | E_Bool ->
       Box Y_Bool
 

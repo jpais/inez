@@ -295,6 +295,7 @@ struct
   and ovar_of_flat_term_base r = function
     | P.B_Var v ->
       Some (ivar_of_iid r v), Int63.zero
+    | P.B_VarF v -> raise (Invalid_argument "TODO: Define case")
     | P.B_Formula g ->
       ovar_of_formula r g
     | P.B_App (f_id, l) ->

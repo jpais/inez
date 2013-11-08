@@ -16,6 +16,7 @@ module Make : functor (I : Id.Accessors) -> sig
 
   and term_base = private
                   | B_Var      of  (I.c, int) Id.t
+		  | B_VarF     of  (I.c, float) Id.t
                   | B_Formula  of  formula
                   | B_App      of  app
                   | B_Ite      of  iite
