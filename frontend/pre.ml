@@ -376,7 +376,58 @@ module Make (I : Id.Accessors) = struct
 
   and flatten_int_term ({r_imemo_h} as r) s =
     Hashtbl.find_or_add r_imemo_h s
-      ~default:(fun () -> flatten_int_term_aux r s)
+      ~default:(fun () -> flatten_arithmetic_term r s)
+
+  and flatten_arithmetic_term ({r_sharing={s_sum_h}} as r) = function
+    | M.M_Var v ->
+      G_Base (B_Var v)
+    | M.M_Ite (c, s, t) ->
+      let c = flatten_formula r c
+      and s = flatten_int_term r s
+      and t = flatten_int_term r t in
+      G_Base (make_iite r c s t)
+    | M.M_FIte (c, s, t) -> 
+      let c = flatten_formula r c
+      and s = flatten_float_term r s
+      and t = flatten_float_term r t
+      G_Base (make_fite r c s t)
+    | M.M_App (f, t) ->
+      G_Base (B_App (flatten_args r [flatten_term r t] f))
+    | M.M_Int _   | M.M_Sum (_, _)  | M.M_Prod (_, _) 
+    | M.M_Float _ | M.M_FSum (_, _) | M.M_FProd (_, _) as t->
+      let d, x = [], Float.zero in
+      let d, x = flatten_arithmetic_term_sum r (d,x) (1.0) t in
+      G_Sum (make_sum r d x)
+    
+  and flatten_arithmetic_term_sum r (d,x) k = function
+    | M.M_Var v -> (k, B_VarF v) :: d,x
+    | M.M_Int i -> d, Float.(x +. k *.(Float.of_int64 i))
+    | M.M_Float i -> d, Float.(x +. k *. i)
+    | M.M_App (f, t) ->
+      let a = flatten_args_float r [flatten_term r t] f in
+      (k, B_App a) :: d, x
+    | M.M_Sum (s, t) ->
+      let d, x = flatten_arithmetic_term_sum r (d, x) k s in
+      flatten_arithmetic_term_sum r (d, x) k t
+    | M.M_FSum(s, t) -> 
+      let d, x = flatten_arithmetic_term_sum r (d, x) k s in
+      flatten_arithmetic_term_sum r (d, x) k t
+    | M.M_Prod(k2, t) ->  
+      flatten_arithmetic_term_sum r (d, x) Float.(k *. k2) t
+    | M.M_FProd(k2, t) ->
+      flatten_arithmetic_term_sum r (d, x) Float.(k *. k2) t
+    | M.M_IteM.M_Ite (c, s, t) ->
+      let c = flatten_formula r c
+      and s = flatten_int_term r s 
+      and t = flatten_int_term r t in
+      (match equal_modulo_offset_float s t with
+	|Some o ->
+	  let d, x = inline_termf r (d, x) k t in  (*TODO *)
+	  (Float.(k *. o), B_Formula c) :: d, x
+	|None ->
+	  (k, make_fite r c s t) :: d, x) (* TODO *)
+ 
+
 
   and flatten_bool_term_aux r = function
     | M.M_Var v ->
@@ -393,7 +444,7 @@ module Make (I : Id.Accessors) = struct
 
   and flatten_float_term ({r_flmemo_h} as r) s =
     Hashtbl.find_or_add r_flmemo_h s
-      ~default:(fun () -> flatten_float_term_aux r s) 
+      ~default:(fun () -> flatten_arithmetic_term r s) 
 
 
   and flatten_term :
