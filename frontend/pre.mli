@@ -58,6 +58,9 @@ module Make : functor (I : Id.Accessors) -> sig
   val flatten_formula :
     ctx -> I.c Logic.A.t Formula.t -> formula
 
+  val flatten_arithmetic_term :
+    ctx -> (I.c, 'v) Logic.M.t -> term 
+
   val ff_ite : formula -> formula -> formula -> formula
 
 end

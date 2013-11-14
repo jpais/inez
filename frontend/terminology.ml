@@ -18,6 +18,9 @@ with compare, sexp
 type 'v offset          =  'v * Core.Std.Int63.t
 with compare, sexp
 
+type 'v float_offset    =  'v * Core.Std.Float.t
+with compare, sexp
+
 type 'v isum            =  'v monomial list
 with compare, sexp
 
@@ -40,4 +43,7 @@ type 't signed          =  S_Pos of 't | S_Neg of 't
 with compare, sexp
 
 type ('i, 'b) ibeither  =  H_Int of 'i | H_Bool of 'b
+with compare, sexp
+
+type ('i, 'b) ifbeither = H_Int of 'i | H_Float of 'i | H_Bool of 'b
 with compare, sexp
