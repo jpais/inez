@@ -231,12 +231,14 @@ struct
   and iexpr_of_flat_term r = function
     | P.G_Sum s ->
       iexpr_of_sum r s
+    | P.G_SumF s -> raise (Failure "Invalid case") (*TODO: Add case for this *)
     | P.G_Base b ->
       match ovar_of_flat_term_base r b with
       | Some v, x ->
         [Int63.one, v], x
       | None, x ->
         [], x
+      
 
   and blast_le ?v ({r_ctx} as r) s =
     let l, o = iexpr_of_sum r s
@@ -320,6 +322,7 @@ struct
             v in
           Hashtbl.find_or_add r_var_of_sum_m l ~default in
         Some v, o)
+    | P.G_SumF s -> raise (Failure "Invalid case")   (* TODO ddd case for this *)
 
   and ovar_of_formula ({r_ctx} as r) g =
     match xvar_of_formula_doit r g with
@@ -346,6 +349,8 @@ struct
         Some v, Int63.zero)
     | H_Bool g ->
       ovar_of_formula r g
+    | H_Float g -> raise (Failure "Invalid case") (* TODO add case for this*)
+    | H_Int (P.G_SumF s) -> raise (Failure "Invalid case") (* TODO add case for this*)
 
   and blast_atom ({r_ctx} as r) = function
     | P.G_Base t, O'_Le ->
@@ -356,6 +361,7 @@ struct
       blast_eq r ([Int63.one, t], Int63.zero)
     | P.G_Sum s, O'_Eq ->
       blast_eq r s
+    | P.G_SumF _, _ -> raise (Failure "Invalid case") (* TODO: add case for this*)
 
   and blast_conjunction_map r acc = function
     | g :: tail ->

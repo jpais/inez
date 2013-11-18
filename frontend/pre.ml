@@ -63,9 +63,9 @@ module Make (I : Id.Accessors) = struct
 
   and term =
   | G_Base  of  term_base
-  | G_Sum   of  new_sum Terminology.float_offset
- (* | G_Sum   of  sum  Terminology.offset
-    | G_SumF  of  sumf Terminology.float_offset  *)
+ (* | G_Sum   of  new_sum Terminology.float_offset *)
+  | G_Sum   of  sum  Terminology.offset 
+  | G_SumF  of  sumf Terminology.float_offset  
 
   and bite = formula * formula * formula
 
@@ -303,7 +303,7 @@ module Make (I : Id.Accessors) = struct
     | g ->
       U_Not g
 
-  let equal_modulo_offset a b =
+ (* let equal_modulo_offset a b =
     match a, b with
     | G_Base b1, G_Base b2 ->
       Option.some_if
@@ -329,8 +329,27 @@ module Make (I : Id.Accessors) = struct
       Option.some_if
         (compare_new_sum s1 s2 = 0)
         Float.(o1 -. o2)
-    | _ -> None
+    | _ -> None *)
 
+ let equal_modulo_offset a b =
+    match a, b with
+    | G_Base b1, G_Base b2 ->
+      Option.some_if
+        (compare_term_base b1 b2 = 0)
+        Float.zero
+    | G_SumF ([c, b1], o), G_Base b2 ->
+          Option.some_if
+                 (c = Float.(1.0) && compare_term_base b1 b2 = 0)
+                  o
+    | G_Base b2, G_SumF ([c, b1], o) ->
+     	   Option.some_if
+                 (c = Float.(1.0) && compare_term_base b1 b2 = 0)
+                 (Float.neg o)  
+    | G_SumF (s1, o1), G_SumF (s2, o2) ->
+      Option.some_if
+        (compare_sumf s1 s2 = 0)
+        Float.(o1 -. o2)
+    | _ -> None
 
  (* 
   let equal_modulo_offset_float a b =
@@ -373,10 +392,11 @@ module Make (I : Id.Accessors) = struct
 	| [] -> []
 	| (i,t) :: l -> (Int63.to_float i, t)::(convert_to_sumf l) in
       (convert_to_sumf s, (Int63.to_float o))  *)
-    | G_Sum s ->
+    | G_SumF s ->
       s
     | G_Base b ->
-      [FloatC (Float.(1.0), b)], Float.zero
+      [(Float.(1.0), b)], Float.zero
+    | _ -> [], Float.zero  (* Este caso hay que borrarlo, queda provisorio por G_Sum *)
 
   let is_bounding = function
     | U_Not (U_Atom (s, O'_Eq)) :: d ->
@@ -394,17 +414,17 @@ module Make (I : Id.Accessors) = struct
       None
     else
       let s = match l with
-        | U_Not (U_Atom (G_Sum (s, _), _)) :: _ ->
+        | U_Not (U_Atom (G_SumF (s, _), _)) :: _ ->
           s
         | U_Not (U_Atom (G_Base b, _)) :: _ ->
-          [FloatC (Float.(1.0), b)]
+          [(Float.(1.0), b)]
         | _ ->
           raise (Unreachable.Exn _here_)
       and l =
         let f acc = function
           | U_Not (U_Atom (G_Base _, _)) ->
             Float.zero :: acc
-          | U_Not (U_Atom (G_Sum (_, d), _)) ->
+          | U_Not (U_Atom (G_SumF (_, d), _)) ->
             d :: acc
           | _ ->
             acc
@@ -443,24 +463,24 @@ module Make (I : Id.Accessors) = struct
       flatten_args r (flatten_term r t :: acc) f
     | M.M_Var v ->
       Id.Box_arrow.Box v, make_args r (List.rev acc)
-
+(*
   and inline_term r (d, x) k = function
     | G_Base b ->
       (k, b) :: d, x
-    | G_Sum (l, o) ->
+    | G_Sum (l, o) ->  
       List.rev_map_append l d ~f:(fun t -> match t with
 	                                    | IntC (c,n)   -> Float.((Int63.to_float c) *. k ), n
 					    | FloatC (c,n) -> Float.(c *. k), n ),
-      Float.(x +. o *. k)
+      Float.(x +. o *. k) 
     | _ -> [], Float.zero   (*revisar*)
-
-  (*and inline_term_float r (d, x) k = function
+*)
+  and inline_term r (d, x) k = function
     | G_Base b -> (k, b) :: d, x
     | G_SumF (l, o)  -> 
       List.rev_map_append l d ~f:(Tuple2.map1 ~f:(Float.( * ) k)),
       Float.(x +. o *. k)
     | _ -> [], Float.zero
-  *)
+  
 
   and flatten_int_term_aux ({r_sharing = {s_sum_h}} as r) = function
     | M.M_Var v ->
@@ -473,16 +493,16 @@ module Make (I : Id.Accessors) = struct
     | M.M_App (f, t) ->
       G_Base (B_App (flatten_args r [flatten_term r t] f))
     | M.M_Int _ | M.M_Sum (_, _) | M.M_Prod (_, _) as t ->
-      let d, x = [], Int63.zero in
-      let d, x = flatten_int_term_sum r (d, x) Int63.one t in
-      G_Sum (make_sum r d x)
+      let d, x = [], Float.zero in               (*Convedra que sea float?*)
+      let d, x = flatten_int_term_sum r (d, x) (Float.(1.0)) t in
+      G_SumF (make_sumf r d x)
 
-  and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
+  and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =   (*Cambio todas las operaciones sobre x para que sean tipo float *)
     match t with
     | M.M_Var v ->
       (k, B_Var v) :: d, x
     | M.M_Int i ->
-      d, Int63.(x + k * i)
+      d, Float.(x +. k *. Int63.to_float(i))
     | M.M_App (f, t) ->
       let a = flatten_args r [flatten_term r t] f in
       (k, B_App a) :: d, x
@@ -490,14 +510,14 @@ module Make (I : Id.Accessors) = struct
       let d, x = flatten_int_term_sum r (d, x) k s in
       flatten_int_term_sum r (d, x) k t
     | M.M_Prod (k2, t) ->
-      flatten_int_term_sum r (d, x) Int63.(k * k2) t
+      flatten_int_term_sum r (d, x) Float.(k *. Int63.to_float(k2)) t
     | M.M_Ite (c, s, t) ->
       let c = flatten_formula r c
       and s = flatten_int_term r s 
       and t = flatten_int_term r t in
       (match equal_modulo_offset s t with
       | Some o ->
-        let d, x = inline_term r (d, x) (Int63.to_float k) t in
+        let d, x = inline_term r (d, x) k t in
         (Float.(k *. o), B_Formula c) :: d, x
       | None ->
         (k, make_iite r c s t) :: d, x) 
@@ -538,9 +558,9 @@ module Make (I : Id.Accessors) = struct
       let c = flatten_formula r c
       and s = flatten_float_term r s 
       and t = flatten_float_term r t in
-      (match equal_modulo_offset_float s t with
+      (match equal_modulo_offset s t with
 	|Some o ->
-	  let d, x = inline_term_float r (d, x) k t in  (*TODO *)
+	  let d, x = inline_term r (d, x) k t in  (*TODO *)
 	  (Float.(k *. o), B_Formula c) :: d, x
 	|None ->
 	  (k, make_iite r c s t) :: d, x)
@@ -565,7 +585,6 @@ module Make (I : Id.Accessors) = struct
   and flatten_int_term ({r_imemo_h} as r) s =
     Hashtbl.find_or_add r_imemo_h s
       ~default:(fun () -> flatten_int_term_aux r s)
-
 
   and flatten_term :
   type s . ctx -> (I.c, s) M.t -> ibflat =
@@ -605,8 +624,8 @@ module Make (I : Id.Accessors) = struct
          | Some (s, lb, ub, true) ->
            negate
              (ret
-                [negate (U_Atom (G_Sum (s, Int63.(one - lb)), O'_Le));
-                 U_Atom (G_Sum (s, Int63.neg ub), O'_Le)])
+                [negate (U_Atom (G_SumF (s, Float.(Float.(1.0) - lb)), O'_Le));
+                 U_Atom (G_SumF (s, Float.neg ub), O'_Le)])
          | Some (s, lb, ub, false) ->
            ret acc
          | None ->
@@ -629,7 +648,7 @@ module Make (I : Id.Accessors) = struct
       | Some k ->
         let l, o = sum_of_term sh in
         let l = (k, B_Formula q) :: l in
-        U_Atom (G_Sum (make_sum r l o), og)
+        U_Atom (G_SumF (make_sumf r l o), og)
       | None ->
         make_bite r q g h)
     | _ ->
@@ -647,7 +666,7 @@ module Make (I : Id.Accessors) = struct
     | Formula.F_Atom (A.A_Eq t) ->
       U_Atom (flatten_int_term r t, O'_Eq)
     | Formula.F_Atom (A.A_EqF t) ->
-      U_Atom (flatten_float_int_term r t, O'_Eq) 
+      U_Atom (flatten_float_term r t, O'_Eq) 
     | Formula.F_Not g ->
       negate (flatten_formula r g)
     | Formula.F_Ite (q, g, h) ->
