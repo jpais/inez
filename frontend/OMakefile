@@ -19,7 +19,7 @@ OCAML_CLIBS = ../backend/libbct
 OCAML_BYTE_LINK_FLAGS = -custom
 OCAML_LINK_FLAGS = -linkpkg \
         -ccopt -L$(SCIP_LIB_DIR) \
-        -cclib -lcamlidl -cclib -lscipopt -cclib -lstdc++
+        -cclib -lcamlidl -cclib -lscipopt -cclib -lstcd++
 
 private.EXT_COBJ = .o
 

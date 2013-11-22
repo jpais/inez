@@ -61,8 +61,13 @@ module Make : functor (I : Id.Accessors) -> sig
   val flatten_bool_term :
     ctx -> (I.c, bool) Logic.M.t -> formula
 
+  val flatten_float_term:
+    ctx -> (I.c, float) Logic.M.t -> term
+
   val flatten_formula :
     ctx -> I.c Logic.A.t Formula.t -> formula
+
+  val flatten_term : ctx -> (I.c,'s) Logic.M.t -> ibflat
 
   val ff_ite : formula -> formula -> formula -> formula
 
