@@ -17,6 +17,7 @@ struct
     ('i, int) t
   | M_Float : Core.Std.Float.t ->
     ('i, float) t
+  | M_R2I : ('i, int) t -> ('i, float) t
   | M_Sum   : ('i, int) t * ('i, int) t ->
     ('i, int) t
   | M_FSum  :  ('i, float) t * ('i,float) t ->
@@ -53,6 +54,8 @@ struct
         Type.Y_Int
       | M_Float _ ->
         Type.Y_Float
+      | M_R2I _ -> 
+	Type.Y_Float
       | M_Sum (_, _) ->
         Type.Y_Int
       | M_FSum (_,_) ->
@@ -150,6 +153,7 @@ struct
         init
       | M_Bool b ->
         f init b
+      | M_R2I x -> fold x ~init ~f
       | M_Sum (a, b) ->
         fold b ~init:(fold a ~init ~f) ~f
       | M_FSum (a, b) ->
@@ -203,6 +207,7 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
       | M1.M_Int i ->
         M_Int i
       | M1.M_Float i -> M_Float i
+      | M1.M_R2I x -> M_R2I (map x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map a ~f ~fv + map b ~f ~fv
       | M1.M_FSum (a, b) ->
@@ -239,6 +244,7 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
       | M1.M_Int i ->
         M_Int i
       | M1.M_Float i -> M_Float i
+      | M1.M_R2I x -> M_R2I (map_non_atomic x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map_non_atomic a ~f ~fv + map_non_atomic b ~f ~fv
       | M1.M_FSum (a, b) -> map_non_atomic a ~f ~fv +. map_non_atomic b ~f ~fv

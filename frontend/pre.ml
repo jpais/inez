@@ -525,6 +525,7 @@ module Make (I : Id.Accessors) = struct
   and flatten_float_term_aux ({r_sharing={s_sumf_h}} as r) = function
     | M.M_Var v ->
       G_Base (B_VarF v)
+    | M.M_R2I x -> flatten_int_term r x 
     | M.M_FIte (c, s, t) -> 
       let c = flatten_formula r c
       and s = flatten_float_term r s
@@ -541,6 +542,7 @@ module Make (I : Id.Accessors) = struct
     | M.M_Var v -> (k, B_VarF v) :: d,x
    (* | M.M_Int i -> d, Float.(x +. k *.(Float.of_int64 i))*)
     | M.M_Float i -> d, Float.(x +. k *. i)
+    | M.M_R2I i -> flatten_int_term_sum r (d,x) k i
     | M.M_App (f, t) ->
       let a = flatten_args r [flatten_term r t] f in
       (k, B_App a) :: d, x

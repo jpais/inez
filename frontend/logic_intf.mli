@@ -8,7 +8,8 @@ module type Term = sig
   | M_Int   :  Core.Std.Int63.t ->
     ('i, int) t
   | M_Float :  Core.Std.Float.t -> 
-    ('i, float) t 
+    ('i, float) t
+  | M_R2I   : ('i, int) t -> ('i, float) t
   | M_Sum   :  ('i, int) t * ('i, int) t ->
     ('i, int) t
   | M_FSum  :  ('i, float) t * ('i,float) t ->
