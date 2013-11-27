@@ -43,7 +43,7 @@ module Make : functor (I : Id.Accessors) -> sig
   with compare
 
   val hashable_sum : sum Core.Std.Hashtbl.Hashable.t
-  val hashable_sumf : sumf Core.Std.Hashtbl.Hashable.t
+  val hashable_rsum : sumf Core.Std.Hashtbl.Hashable.t
   val hashable_args : args Core.Std.Hashtbl.Hashable.t
   val hashable_iite : iite Core.Std.Hashtbl.Hashable.t
   val hashable_bite : bite Core.Std.Hashtbl.Hashable.t
@@ -61,7 +61,7 @@ module Make : functor (I : Id.Accessors) -> sig
   val flatten_bool_term :
     ctx -> (I.c, bool) Logic.M.t -> formula
 
-  val flatten_float_term:
+  val flatten_real_term:
     ctx -> (I.c, float) Logic.M.t -> term
 
   val flatten_formula :

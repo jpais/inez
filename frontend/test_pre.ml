@@ -28,7 +28,7 @@ let ctx = P.make_ctx () ;;
 let fresh_int_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Int) ;;
 
-let fresh_float_var () =
+let fresh_real_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Float);;
 
 let fresh_bool_var () =
@@ -42,5 +42,5 @@ let flatten_formula g =
 let flatten_term t = 
   P.flatten_term ctx t;;
 
-let flatten_float_term f = 
- P.flatten_float_term ctx f;;
+let flatten_real_term f = 
+ P.flatten_real_term ctx f;;
