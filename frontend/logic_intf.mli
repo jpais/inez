@@ -9,7 +9,7 @@ module type Term = sig
     ('i, int) t
   | M_Float :  Core.Std.Float.t -> 
     ('i, float) t
-  | M_R2I   : ('i, int) t -> ('i, float) t
+  | M_ROI   : ('i, int) t -> ('i, float) t
   | M_Sum   :  ('i, int) t * ('i, int) t ->
     ('i, int) t
   | M_FSum  :  ('i, float) t * ('i,float) t ->
@@ -37,6 +37,8 @@ module type Term_with_ops = sig
   val one : ('a, int) t
   val zerof : ('a, float) t
  
+  val roi : ('a, int) t -> ('a, float) t
+  
   (* conversions *)
 
   val of_int63 : Core.Std.Int63.t -> ('a, int) t

@@ -291,6 +291,6 @@ Reset_cflags(db_ocaml_embedded)
 .PHONY: clean
 
 clean:
-    rm -f *.o *.cm[iox] *.cmxs smtlib_lexer.ml inez *.opt *.top *.omc	\
+    rm -f *.o *.cm[ix] *.cmxs smtlib_lexer.ml inez *.opt *.top *.omc	\
     scip_idl.ml scip_idl.mli scip_idl.h scip_idl_stubs.c		\
     ocaml_embedded.c db_ocaml_embedded.c libstdc++.a

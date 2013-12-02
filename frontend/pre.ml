@@ -573,7 +573,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
   and flatten_real_term_aux ({r_sharing={s_sumr_h}} as r) = function
     | M.M_Var v ->
       G_Base (B_VarF v)
-    | M.M_R2I x -> flatten_int_term r x 
+    | M.M_ROI x -> flatten_int_term r x 
     | M.M_FIte (c, s, t) -> 
       let c = flatten_formula r c
       and s = flatten_real_term r s
@@ -589,7 +589,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
   and flatten_real_term_sum r (d,x) k = function
     | M.M_Var v -> (k, B_VarF v) :: d,x
     | M.M_Float i -> d, Float.(x +. k *. i)
-    | M.M_R2I i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.one) Int63.one i in
+    | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.one) Int63.one i in
                    let l, c = make_real d_aux x_aux in
 		   (List.append d l), x  
     | M.M_App (f, t) ->
@@ -638,7 +638,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
       match M.type_of_t t ~f:I.type_of_t' with
       | Type.Y_Int ->
         H_Int (flatten_int_term r t)
-      | Type.Y_Float ->
+      | Type.Y_Real ->
         H_Float (flatten_real_term r t) 
       | Type.Y_Bool ->
         H_Bool (flatten_bool_term r t)

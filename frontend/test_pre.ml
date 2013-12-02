@@ -29,7 +29,7 @@ let fresh_int_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Int) ;;
 
 let fresh_real_var () =
-  Logic.M.M_Var (Id'.gen_id Type.Y_Float);;
+  Logic.M.M_Var (Id'.gen_id Type.Y_Real);;
 
 let fresh_bool_var () =
   Formula.F_Atom

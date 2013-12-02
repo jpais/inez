@@ -6,10 +6,10 @@ val sexp_of_ibtype : ibtype -> Sexplib.Sexp.t
 
 type _ t =
 | Y_Int         :  int t
-| Y_Float       :  float t
+| Y_Real       :  float t
 | Y_Bool        :  bool t
 | Y_Int_Arrow   :  'a t -> (int -> 'a) t
-| Y_Float_Arrow :  'a t -> (float -> 'a) t
+| Y_Real_Arrow :  'a t -> (float -> 'a) t
 | Y_Bool_Arrow  :  'a t -> (bool -> 'a) t
 
 val compare : 'a t -> 'a t -> int
