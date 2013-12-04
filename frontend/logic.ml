@@ -43,7 +43,6 @@ struct
 
   let roi (x : ('i, int) t) = (M_ROI x : ('i, float) t)
 
-
   let of_int63 x = M_Int x
 
   let rec type_of_t :

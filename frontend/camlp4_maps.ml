@@ -159,12 +159,16 @@ let transform_real_logic_aux mid e =
   | <:expr< $uid:mid$.M.M_Int $i1$ * $uid:mid'$.M.M_Int $i2$ >>
       when mid = mid' ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.(i1 * i2)) >>
+(*  | <:expr< $int:s$ >> ->
+    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> *)
   | <:expr< $int:s$ >> ->
-    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> 
+    <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) >>
+  | <:expr< $int64:s$ >> ->
+    <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) >>
   | <:expr< $flo:s$ >> ->
     <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >>
-  | <:expr< $int64:s$ >> ->
-    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> 
+(*  | <:expr< $int64:s$ >> ->
+    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> *)
   | _ ->
     e
 

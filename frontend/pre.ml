@@ -589,9 +589,9 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
   and flatten_real_term_sum r (d,x) k = function
     | M.M_Var v -> (k, B_VarF v) :: d,x
     | M.M_Float i -> d, Float.(x +. k *. i)
-    | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.one) Int63.one i in
+    | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
                    let l, c = make_real d_aux x_aux in
-		   (List.append d l), x  
+		   (List.append d l), x +. c
     | M.M_App (f, t) ->
       let a = flatten_args r [flatten_term r t] f in
       (k, B_App a) :: d, x

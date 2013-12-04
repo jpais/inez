@@ -15,16 +15,25 @@ with compare, sexp
 type 'v monomial        =  Core.Std.Int63.t * 'v
 with compare, sexp
 
+type 'v rmonomial       =  Core.Std.Float.t * 'v
+with compare, sexp
+
 type 'v offset          =  'v * Core.Std.Int63.t
 with compare, sexp
 
-type 'v float_offset    =  'v * Core.Std.Float.t
+type 'v roffset    =  'v * Core.Std.Float.t
 with compare, sexp
 
 type 'v isum            =  'v monomial list
 with compare, sexp
 
+type 'v rsum            =  'v rmonomial list
+with compare, sexp
+
 type 'v iexpr           =  'v isum offset
+with compare, sexp
+
+type 'v rexp            =  'v rsum roffset
 with compare, sexp
 
 type mip_type           =  T_Int of (Core.Std.Int63.t option *

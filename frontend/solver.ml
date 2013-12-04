@@ -42,6 +42,17 @@ struct
     sexp_of_t = S.sexp_of_bvar
   }
 
+(* Added rvar for real variables. Check what happens with S.compare_rvar, S.sexp_of_rvar*)
+
+  let hashable_rvar = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = S.compare_rvar;
+    sexp_of_t = S.sexp_of_rvar
+  }
+
+(*End here*)
+    
   type fid = I.c Id.Box_arrow.t
   with compare, sexp_of
 
@@ -71,6 +82,18 @@ struct
     compare = compare_bid;
     sexp_of_t = sexp_of_bid
   }
+
+(*Added type for real variables *)
+  type rid = (I.c, float) Id.t
+  with compare, sexp_of
+
+  let hashable_rid = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_rid;
+    sexp_of_t = sexp_of_rid
+  }
+(* End here *)
 
   type ovar = S.ivar option offset
   with compare, sexp_of
@@ -103,6 +126,19 @@ struct
     sexp_of_t = sexp_of_bg_isum;
   }
 
+(* Added: list of float * rvar *)
+  type bg_rsum = S.rvar rsum
+  with compare, sexp_of
+
+  let hashable_bg_rsum = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_bg_rsum;
+    sexp_of_t = sexp_of_bg_rsum
+  }
+
+(*end *)
+
   let type_of_term :
   type t . t term -> t Type.t =
     fun x -> M.type_of_t ~f:I.type_of_t' x
@@ -125,6 +161,8 @@ struct
 
   let mip_type_bool = T_Int (Some Int63.zero, Some Int63.one)
 
+  let mip_type_real = T_Real (None, None)
+
   (* context *)
 
   type ctx = {
@@ -132,13 +170,17 @@ struct
     r_pre_ctx          :  P.ctx;
     r_ivar_m           :  (iid, S.ivar) Hashtbl.t;
     r_bvar_m           :  (bid, S.bvar) Hashtbl.t;
+    r_rvar_m           :  (rid, S.rvar) Hashtbl.t;   (*Added*)
     r_iid_m            :  (S.ivar, iid) Hashtbl.t;
     r_bid_m            :  (S.bvar, bid) Hashtbl.t;
+    r_rid_m            :  (S.rvar, rid) Hashtbl.t;   (*Added*)
     r_xvar_m           :  (P.formula, xvar) Hashtbl.t;
     r_fun_m            :  (fid, S.f) Hashtbl.t;
     r_call_m           :  (bg_call, S.ivar) Hashtbl.t;
     r_sum_m            :  (P.sum, S.ivar iexpr) Hashtbl.t;
-    r_var_of_sum_m     :  (bg_isum, S.ivar) Hashtbl.t;
+    r_rsum_m           :  (P.sum, S.rvar iexpr) Hashtbl.t;   (*Added*)
+    r_var_of_sum_m     :  (bg_isum, S.ivar) Hashtbl.t;       (*Added*)
+    r_rvar_of_rsum_m    :  (bg_rsum, S.rvar) Hashtbl.t;
     r_ovar_of_iite_m   :  (P.iite, ovar) Hashtbl.t;
     r_q                :  P.formula Dequeue.t;
     mutable r_obj      :  P.term option;
@@ -153,10 +195,14 @@ struct
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_iid;
     r_bvar_m  = 
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_bid;
+    r_rvar_m  =
+      Hashtbl.create ()  ~size:10240  ~hashable:hashable_rid;
     r_iid_m =
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_ivar;
     r_bid_m =
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_bvar;
+    r_rid_m =
+      Hashtbl.create ()  ~size:10240  ~hashable:hashable_rvar
     r_xvar_m  =
       Hashtbl.create ()  ~size:10240  ~hashable:P.hashable_formula;
     r_fun_m   =
@@ -165,8 +211,12 @@ struct
       Hashtbl.create ()  ~size:2048   ~hashable:hashable_bg_call;
     r_sum_m =
       Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_sum;
+    r_rsum_m =
+      Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_rsum; 
     r_var_of_sum_m =
       Hashtbl.create ()  ~size:2048   ~hashable:hashable_bg_isum;
+    r_rvar_of_rsum_m =
+      Hashtbl.create ()  ~size:2048   ~hashable:hashable_bg_rsum; 
     r_ovar_of_iite_m =
       Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_iite;
     r_q       =
@@ -188,8 +238,14 @@ struct
   let ivar_of_iid {r_ctx; r_ivar_m; r_iid_m} x =
     Hashtbl.find_or_add r_ivar_m x
       ~default:(fun () ->
-        let v = S.new_ivar r_ctx mip_type_int in
+        let v = S.new_ivar r_ctx mip_type_int in   
         Hashtbl.replace r_iid_m v x; v)
+
+  let rvar_of_rid {r_ctx; r_rvar_m; r_rid_m} x =
+    Hashtbl.find_or_add r_rvar_m x
+      ~default:(fun () ->
+	let v = S.new_rvar r_ctx mip_type_real in       (* S.new_rvar*)
+	Hashtbl.replace r_rid_m v x; v
 
   let bvar_of_bid {r_ctx; r_bvar_m; r_bid_m} x =
     Hashtbl.find_or_add r_bvar_m x
@@ -201,6 +257,8 @@ struct
 
   let bid_of_bvar {r_bid_m} = Hashtbl.find r_bid_m
 
+  let rid_of_rvar {r_rid_m} = Hashtbl.find r_rid_m
+
   (* linearizing terms and formulas: utilities before we get into the
      mutually recursive part *)
 
@@ -210,6 +268,9 @@ struct
 
   let negate_isum =
     List.map ~f:(Tuple2.map1 ~f:Int63.neg)
+
+  let negate_rsum = 
+    List.map ~f:(Tuple2.map1 ~f:(Float.neg))
 
   (* linearizing terms and formulas: mutual recursion, because terms
      contain formulas and vice versa *)
@@ -227,6 +288,20 @@ struct
           and init = [], Int63.zero in
           List.fold_left ~init ~f l) in
     l, Int63.(o' + o)
+
+  let rec iexpr_of_sum_real ({r_rsum_m} as r) (l, o) =
+    let l, o' = 
+      Hashtbl.find_or_add r_rsum_m l
+	~default:(fun () ->
+	  let f (l,o) (c,t) = 
+	    match ovar_of_flat_term_base_real r t with
+	      | Some v, x ->
+		(c,v) :: l, Float.(o + c *x)
+	      | None, x ->
+		l, Float.(o + c * x)
+	  and init = [], Float.zero in
+	  List.fold_left ~init ~f l) in
+    l, Float.(o' + o)
 
   and iexpr_of_flat_term r = function
     | P.G_Sum s ->
@@ -247,6 +322,20 @@ struct
     S.add_indicator r_ctx (S_Neg v)  (negate_isum l)  Int63.(o - one);
     S_Pos (Some v)
 
+  and blast_eq_real ({r_ctx} as r) s =
+    let l, o = iexpr_of_sum_real r s in
+    let l_neg = negate_rsum l in
+    let b = S.new_bvar r_ctx in
+    let b_lt = S_Pos (S.new_bvar r_ctx)
+    and b_gt = S_Pos (S.new_bvar r_ctx)
+    and b_eq = S_Pos b in
+    S.add_indicator r_ctx b_eq l (Float.neg o);
+    S.add_indicator r_ctx b_eq l_neg o;
+    S.add_indicator r_ctx b_lt l Float.(neg o - 1.0);
+    S.add_indicator r_ctx b_gt l_neg Float.(o - 1.0);
+    S.add_clause t_ctx [b_eq; b_lt; b_eq];
+    S_Pos (Some b) 
+      
   and blast_eq ({r_ctx} as r) s =
     let l, o = iexpr_of_sum r s in
     let l_neg = negate_isum l in
@@ -261,6 +350,7 @@ struct
     S.add_clause r_ctx [b_eq; b_lt; b_gt];
     S_Pos (Some b)
 
+(*Do I need a version for real numbers?*)
   and var_of_app ({r_ctx; r_call_m} as r) f_id l t =
     let f = get_f r f_id
     and l = List.map l ~f:(ovar_of_ibeither r)
@@ -297,13 +387,28 @@ struct
   and ovar_of_flat_term_base r = function
     | P.B_Var v ->
       Some (ivar_of_iid r v), Int63.zero
-    | P.B_VarF v -> raise (Invalid_argument "TODO: Define case")
+    | P.B_VarF v -> raise (Invalid_argument "Undefined case for ILP")
     | P.B_Formula g ->
       ovar_of_formula r g
     | P.B_App (f_id, l) ->
       Some (var_of_app r f_id l mip_type_int), Int63.zero
     | P.B_Ite i ->
       ovar_of_ite r i
+
+
+(* Added case to process B_VarF. Can't use ovar_of_flat_term_base because manipulates Int offset*)
+  and ovar_of_flat_term_base_real r = function
+    | P.B_Var v ->
+      Some (ivar_of_iid r v), Float.zero
+    | P.B_VarF v -> Some (rvar_of_rid r v), Float.zero 
+    | P.B_Formula g ->
+      ovar_of_formula_real r g
+    | P.B_App (f_id, l) ->
+      Some (var_of_app_real r f_id l mip_type_real), Float.zero
+    | P.B_Ite i ->
+      ovar_of_ite_real r i
+
+
         
   and ovar_of_term ({r_ctx; r_var_of_sum_m} as r) = function
     | P.G_Base b ->
@@ -334,6 +439,16 @@ struct
       (let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
        Option.map v ~f), Int63.zero
 
+  and ovar_of_formula_real ({r_ctx} as r) g =
+    match xvar_of_formula_doit r g with
+      | S_Pos (Some v) ->
+	Some (S.rvar_of_bvar v), Float.zero                  
+      | S_Pos None -> 
+	None, Float.zero
+      | S_Neg v ->
+	(let f v = S.rvar_of_bvar (S.negate_bvar r_ctx v) in
+	 Option.map v ~f), Float.zero
+
   and ovar_of_ibeither ({r_ctx} as r) = function
     | H_Int (P.G_Base b) ->
       ovar_of_flat_term_base r b
@@ -361,7 +476,8 @@ struct
       blast_eq r ([Int63.one, t], Int63.zero)
     | P.G_Sum s, O'_Eq ->
       blast_eq r s
-    | P.G_SumF _, _ -> raise (Failure "Invalid case") (* TODO: add case for this*)
+    | P.G_SumF s, O'_Le -> raise (Failure "Invalid case") (* TODO: add case for this*)
+    | P.G_SumF s, O'_Eq -> blast_eq_real r s
 
   and blast_conjunction_map r acc = function
     | g :: tail ->

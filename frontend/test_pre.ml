@@ -20,6 +20,7 @@ let () =
 
 open Core.Std ;;
 
+
 module Id' = Id.Make (struct end) ;;
 module P = Pre.Make (Id') ;;
 
@@ -44,3 +45,8 @@ let flatten_term t =
 
 let flatten_real_term f = 
  P.flatten_real_term ctx f;;
+
+let x = fresh_real_var();;
+let y = fresh_int_var();;
+
+let roi x = Logic.M.roi x ;;
