@@ -33,7 +33,7 @@ with compare, sexp
 type 'v iexpr           =  'v isum offset
 with compare, sexp
 
-type 'v rexp            =  'v rsum roffset
+type 'v rexpr            =  'v rsum roffset
 with compare, sexp
 
 type mip_type           =  T_Int of (Core.Std.Int63.t option *

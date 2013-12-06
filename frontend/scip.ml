@@ -36,6 +36,8 @@ let ivar_of_bvar x = x
 (* TODO : check bounds *)
 let bvar_of_ivar x = x
 
+let rvar_of_bvar x = x
+
 type named_constraint = cons
 
 let string_of_retcode = function
@@ -225,6 +227,17 @@ let add_indicator ({r_ctx} as r) v l o =
          (Int63.to_float o)) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
+let add_real_indicator ({r_ctx} as r) v l o =
+  let c =
+    assert_ok1 _here_
+      (sCIPcreateConsBasicIndicator r_ctx
+	 (make_constraint_id r)
+	 (var_of_var_signed r v)
+	 (Array.of_list_map ~f:snd l)
+	 (Array.of_list_map ~f:fst l)
+	 o) in
+  assert_ok _here_ (sCIPaddCons r_ctx c)
+
 let add_clause ({r_ctx; r_constraints_n} as r) l =
   let c =
     assert_ok1 _here_
@@ -291,6 +304,9 @@ let ideref_sol {r_ctx} sol v =
 let bderef_sol {r_ctx} sol v =
   Float.(>) (sCIPgetSolVal r_ctx sol v) 0.5
 
+let rderef_sol {r_ctx} sol v = 
+  (sCIPgetSolVal r_ctx sol v)
+
 let ideref ({r_sol} as r) v =
   Option.map r_sol ~f:(fun s -> ideref_sol r s v)
 
@@ -314,6 +330,7 @@ module Types = struct
   type ctx = scip_ctx
   type ivar = var
   type bvar = var
+  type rvar = var
   let compare_ivar = compare_var
   let hash_ivar = hash_var
   let sexp_of_ivar = sexp_of_var
@@ -322,6 +339,10 @@ module Types = struct
   let sexp_of_bvar = sexp_of_var
   let ivar_of_bvar = ivar_of_bvar
   let bvar_of_ivar = bvar_of_ivar
+  let rvar_of_bvar = rvar_of_bvar
+  let sexp_of_rvar = sexp_of_var
+  let hash_rvar = hash_var
+  let compare_rvar = compare_var
 end
 
 module Types_uf = struct
@@ -336,6 +357,7 @@ module Access = struct
   let new_f = new_f
   let new_ivar = new_ivar
   let new_bvar = new_bvar
+  let new_rvar = new_ivar
   let negate_bvar = negate_bvar
   let add_eq = add_eq
   let add_le = add_le
@@ -422,6 +444,8 @@ module Dp_access = struct
 
   let bderef_sol = bderef_sol
 
+  let rderef_sol = rderef_sol
+
 end
 
 module Scip_basic : Imt_intf.S_unit_creatable = struct
@@ -440,7 +464,8 @@ module Scip_with_dp = struct
 
     (D : Imt_intf.S_dp
      with type ivar_plug := ivar
-     and type bvar_plug := bvar) =
+     and  type bvar_plug := bvar
+     and  type rvar_plug := rvar) =
 
   struct
 
@@ -506,6 +531,8 @@ module Scip_with_dp = struct
     let register_ivar = register_var
 
     let register_bvar = register_var
+
+    let register_rvar = register_var
 
   end
 

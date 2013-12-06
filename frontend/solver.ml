@@ -178,7 +178,7 @@ struct
     r_fun_m            :  (fid, S.f) Hashtbl.t;
     r_call_m           :  (bg_call, S.ivar) Hashtbl.t;
     r_sum_m            :  (P.sum, S.ivar iexpr) Hashtbl.t;
-    r_rsum_m           :  (P.sum, S.rvar iexpr) Hashtbl.t;   (*Added*)
+    r_rsum_m           :  (P.sumf, S.rvar rexpr) Hashtbl.t;   (*Added*)
     r_var_of_sum_m     :  (bg_isum, S.ivar) Hashtbl.t;       (*Added*)
     r_rvar_of_rsum_m    :  (bg_rsum, S.rvar) Hashtbl.t;
     r_ovar_of_iite_m   :  (P.iite, ovar) Hashtbl.t;
@@ -202,7 +202,7 @@ struct
     r_bid_m =
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_bvar;
     r_rid_m =
-      Hashtbl.create ()  ~size:10240  ~hashable:hashable_rvar
+      Hashtbl.create ()  ~size:10240  ~hashable:hashable_rvar;
     r_xvar_m  =
       Hashtbl.create ()  ~size:10240  ~hashable:P.hashable_formula;
     r_fun_m   =
@@ -245,7 +245,7 @@ struct
     Hashtbl.find_or_add r_rvar_m x
       ~default:(fun () ->
 	let v = S.new_rvar r_ctx mip_type_real in       (* S.new_rvar*)
-	Hashtbl.replace r_rid_m v x; v
+	Hashtbl.replace r_rid_m v x; v)
 
   let bvar_of_bid {r_ctx; r_bvar_m; r_bid_m} x =
     Hashtbl.find_or_add r_bvar_m x
@@ -289,7 +289,7 @@ struct
           List.fold_left ~init ~f l) in
     l, Int63.(o' + o)
 
-  let rec iexpr_of_sum_real ({r_rsum_m} as r) (l, o) =
+  and iexpr_of_sum_real ({r_rsum_m} as r) (l, o) =
     let l, o' = 
       Hashtbl.find_or_add r_rsum_m l
 	~default:(fun () ->
@@ -407,8 +407,6 @@ struct
       Some (var_of_app_real r f_id l mip_type_real), Float.zero
     | P.B_Ite i ->
       ovar_of_ite_real r i
-
-
         
   and ovar_of_term ({r_ctx; r_var_of_sum_m} as r) = function
     | P.G_Base b ->

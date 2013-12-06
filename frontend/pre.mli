@@ -28,7 +28,7 @@ module Make : functor (I : Id.Accessors) -> sig
   and term = private
              | G_Base  of  term_base
 	     | G_Sum   of  sum Terminology.offset
-             | G_SumF   of  sumf Terminology.float_offset
+             | G_SumF  of  sumf Terminology.roffset
 
   and bite = formula * formula * formula
 

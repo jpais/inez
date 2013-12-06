@@ -31,7 +31,7 @@ module type S_types = sig
 
   val hash_rvar : rvar -> int
 
-  val sexp_if_rvar : rvar -> Sexplib.Sexp.t
+  val sexp_of_rvar : rvar -> Sexplib.Sexp.t
 
   val ivar_of_bvar : bvar -> ivar
 
@@ -209,7 +209,7 @@ module type S_dp_finegrained = sig
     (S : S_dp_access
      with type ivar = ivar_plug
      and type bvar = bvar_plug
-     and type rvar = rvar_plugin) :
+     and type rvar = rvar_plug) :
 
   sig
     

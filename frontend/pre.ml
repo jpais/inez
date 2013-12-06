@@ -64,7 +64,7 @@ module Make (I : Id.Accessors) = struct
   and term =
   | G_Base  of  term_base
   | G_Sum   of  sum  Terminology.offset 
-  | G_SumF  of  sumf Terminology.float_offset  
+  | G_SumF  of  sumf Terminology.roffset  
 
   and bite = formula * formula * formula
 
