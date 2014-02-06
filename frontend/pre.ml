@@ -210,6 +210,9 @@ module Make (I : Id.Accessors) = struct
         loop ~acc:(a :: acc) d in
     loop ~acc:[] l
   *)
+
+  
+
   let dedup_sum l =
     let l = List.sort ~cmp:compare_sumt l in
     let rec loop ~acc = function
@@ -245,8 +248,20 @@ module Make (I : Id.Accessors) = struct
     loop ~acc:[] l
  *)
 
+  let try_dedup_real_sum = function 
+    | H_Float (G_SumF (l, o)) -> let ordenador (n1,v1) (n2, v2) = 
+				   if compare_term_base v1 v2 = 0
+				   then Float.to_int(Float.(n1 - n2))
+				   else compare_term_base v1 v2 in
+				 List.sort ~cmp:ordenador l
+    | _ -> raise (Unreachable.Exn _here_)
+  
   let dedup_real_sum l =
-    let l = List.sort ~cmp:compare_sumtf l in
+    let sorter (n1,v1) (n2, v2) = if compare_term_base v1 v2 = 0
+				  then Float.to_int(Float.(n1 - n2))
+				  else compare_term_base v1 v2 in
+			 
+    let l = List.sort ~cmp:sorter l in
     let rec loop ~acc = function
       | [] -> acc
       | hd :: [] -> hd :: acc

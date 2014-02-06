@@ -50,3 +50,5 @@ let x = fresh_real_var();;
 let y = fresh_int_var();;
 
 let roi x = Logic.M.roi x ;;
+
+let dedup f = P.try_dedup_real_sum f;;

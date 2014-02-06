@@ -71,4 +71,6 @@ module Make : functor (I : Id.Accessors) -> sig
 
   val ff_ite : formula -> formula -> formula -> formula
 
+  val try_dedup_real_sum : (term, 'a) Terminology.ifbeither -> sumtf Core.Std.List.t
+
 end
