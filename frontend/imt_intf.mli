@@ -80,12 +80,19 @@ module type S_access = sig
   (** [add_eq ctx i rhs] asserts i = rhs *) 
   val add_eq : ctx -> ivar isum -> Int63.t -> unit
 
+  val add_real_eq : ctx -> ivar  rsum -> Float.t -> unit
+
   (** [add_le ctx i rhs] asserts i <= rhs *) 
   val add_le : ctx -> ivar isum -> Int63.t -> unit
 
   (** [add_indicator ctx v i] asserts v => (i <= rhs) *) 
   val add_indicator :
     ctx -> bvar signed -> ivar isum -> Int63.t -> unit
+
+  (** [add_real_indicator ctx v r] asserts v => (i <= rhs) *)
+  val add_real_indicator :
+   (* ctx -> bvar signed -> rvar rsum -> Float.t -> unit*)
+    ctx -> bvar signed -> ivar rsum -> Float.t -> unit
 
   (** [add_clause ctx l] asserts l (viewed as a clause) *)
   val add_clause : ctx -> bvar signed list -> unit

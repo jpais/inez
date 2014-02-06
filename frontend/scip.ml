@@ -202,8 +202,25 @@ let create_constraint ({r_ctx} as r) eq l o =
                sCIPinfinity r_ctx))
        (Int63.to_float o))
 
+let create_real_constraint ({r_ctx} as r) eq l o =
+  assert_ok1 _here_
+    (sCIPcreateConsBasicLinear r_ctx
+       (make_constraint_id r)
+       (Array.of_list_map ~f:snd l)
+       (Array.of_list_map ~f:fst l)
+       (-.
+	   (if eq then 
+	       Float.(neg o)
+	    else 
+	       sCIPinfinity r_ctx))
+       Float.(o))
+
 let add_eq ({r_ctx} as r) l o =
   let c = create_constraint r true l o in
+  assert_ok _here_ (sCIPaddCons r_ctx c)
+
+let add_real_eq ({r_ctx} as r) l o = 
+  let c = create_real_constraint r true l o in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_le ({r_ctx} as r) l o =
@@ -360,8 +377,10 @@ module Access = struct
   let new_rvar = new_ivar
   let negate_bvar = negate_bvar
   let add_eq = add_eq
+  let add_real_eq = add_real_eq
   let add_le = add_le
   let add_indicator = add_indicator
+  let add_real_indicator = add_real_indicator (* Added *)
   let add_clause = add_clause
   let add_call = add_call
   let add_objective = add_objective

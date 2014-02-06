@@ -144,8 +144,10 @@ let transform_real_logic_aux mid e =
     <:expr< Formula.F_True >>
   | <:expr< false >> ->
     <:expr< Formula.(F_Not F_True) >>
+  | <:expr< $uid:mid$.M.M_ROI $x$ >> ->
+    <:expr< $uid:mid$.M.M_ROI (transform_logic_aux $x$) >>
   | <:expr< $uid:mid$.M.M_Int $x$ * $uid:mid'$.M.M_Int $y$ >>
-      when mid = mid' ->
+      when mid = mid' ->  
     <:expr< $uid:mid$.M.M_Int (Int63.( * ) $x$ $y$) >>
   | <:expr< $uid:mid$.M.M_Float $x$ *. $uid:mid'$.M.M_Float $y$ >>
       when mid = mid' ->
