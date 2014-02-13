@@ -14,6 +14,9 @@ module type S = sig
   val add_objective :
     ctx -> (c, int) Logic.M.t -> [> `Duplicate | `Ok]
 
+  val add_real_objective :
+    ctx -> (c, float) Logic.M.t -> [> `Duplicate | `Ok]
+
   val deref_int :
     ctx -> (c, int) Id.t -> Core.Std.Int63.t option
 
@@ -63,6 +66,11 @@ module type S_with_holes = sig
 
   val bvar_of_id :
     ctx -> (c, bool) Id.t -> bvar
+
+(* For testing purposes *)
+    
+  val xvar_formula : ctx -> c Logic.A.t Formula.t -> xvar
+(* end *)
 
   val bg_assert_all_cached : ctx -> unit
 

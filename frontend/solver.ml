@@ -362,7 +362,7 @@ struct
   and iexpr_of_flat_term r = function
     | P.G_Sum s ->
       iexpr_of_sum r s
-    | P.G_SumF s -> raise (Failure "Invalid case") (*TODO: Add case for this *)
+    | P.G_SumF s -> raise (Failure "Invalid case: iexpr_of_flat_term") (*TODO: Add case for this *)
     | P.G_Base b ->
       match ovar_of_flat_term_base r b with
       | Some v, x ->
@@ -371,7 +371,7 @@ struct
         [], x
 
   and iexpr_of_flat_term_real r = function
-    | P.G_Sum s -> raise (Failure "Invalid case")
+    | P.G_Sum s -> raise (Failure "Invalid case: iexpr_of_flat_term_real")
     | P.G_SumF s -> iexpr_of_sum_real r s
     | P.G_Base b ->
       match ovar_of_flat_term_base_real r b with
@@ -388,6 +388,13 @@ struct
     S.add_indicator r_ctx (S_Pos v)  l                (Int63.neg o);
     S.add_indicator r_ctx (S_Neg v)  (negate_isum l)  Int63.(o - one);
     S_Pos (Some v)
+
+  and blast_le_real ?v ({r_ctx} as r) s =
+    let l,o = iexpr_of_sum_real r s
+    and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
+    S.add_real_indicator r_ctx (S_Pos v) l (Float.neg o);
+    S.add_real_indicator r_ctx (S_Neg v) (negate_rsum l) Float.(o - 1.0);
+    S_Pos (Some v) 
 
 
 (* add_indicator expects a list of pairs where the first component is an int. Then it casts int -> to float before passing it to scip. This function is almost identical but handles Float negation and invokes add_real_indicator, similar to the other one but expects floats as first projection*)
@@ -527,7 +534,7 @@ struct
             v in
           Hashtbl.find_or_add r_var_of_sum_m l ~default in
         Some v, o)
-    | P.G_SumF s -> raise (Failure "Invalid case")   (* TODO ddd case for this *)
+    | P.G_SumF s -> raise (Failure "Invalid case: ovar_of_flat_term_base_real")   (* TODO ddd case for this *)
 
 and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | P.G_Base b ->
@@ -596,7 +603,7 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
       blast_eq r ([Int63.one, t], Int63.zero)
     | P.G_Sum s, O'_Eq ->
       blast_eq r s
-    | P.G_SumF s, O'_Le -> raise (Failure "Invalid case") (* TODO: add case for this*)
+    | P.G_SumF s, O'_Le -> blast_le_real r s 
     | P.G_SumF s, O'_Eq -> blast_eq_real r s
 
   and blast_conjunction_map r acc = function
@@ -719,6 +726,7 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
     let g = P.flatten_formula r_pre_ctx g in
     lazy (xvar_of_formula_doit r g)
 
+ 
   let xvar_of_term ({r_pre_ctx} as r) m =
     let g = P.flatten_bool_term r_pre_ctx m in
     lazy (xvar_of_formula_doit r g)
@@ -759,10 +767,29 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | Some _ ->
       `Duplicate
 
+  let add_real_objective ({r_obj; r_pre_ctx} as r) o =
+   match r_obj with
+    | None ->
+      let m = P.flatten_real_term r_pre_ctx o in
+      r.r_obj <- Some m; `Ok
+    | Some _ ->
+      `Duplicate
+
+
   let deref_int {r_ctx; r_ivar_m} id =
     Option.(Hashtbl.find r_ivar_m id >>= S.ideref r_ctx)
 
   let deref_bool {r_ctx; r_bvar_m} id =
     Option.(Hashtbl.find r_bvar_m id >>= S.bderef r_ctx)
+
+(* 
+For testing purposes
+*)
+
+ let xvar_formula ({r_pre_ctx} as r) g =
+    let g = P.flatten_formula r_pre_ctx g in
+    blast_formula r g
+
+(* end *)
 
 end
