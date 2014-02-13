@@ -287,6 +287,15 @@ let add_objective {r_ctx; r_has_objective} l =
          assert_ok _here_ (sCIPchgVarObj r_ctx v c));
      `Ok)
 
+let add_real_objective {r_ctx; r_has_objective} l =
+  if r_has_objective then
+    `Duplicate
+  else
+    (List.iter l
+       ~f:(fun (c, v) ->
+           assert_ok _here_ (sCIPchgVarObj r_ctx v c));
+     `Ok)
+
 let result_of_status = function
   | SCIP_STATUS_OPTIMAL ->
     R_Opt
@@ -329,6 +338,9 @@ let ideref ({r_sol} as r) v =
 
 let bderef ({r_sol} as r) v =
   Option.map r_sol ~f:(fun s -> bderef_sol r s v)
+
+let rderef ({r_sol} as r) v = 
+  Option.map r_sol ~f:(fun s -> rderef_sol r s v)
 
 let branch {r_ctx} v x =
   let lb = sCIPvarGetLbLocal v
@@ -384,9 +396,11 @@ module Access = struct
   let add_clause = add_clause
   let add_call = add_call
   let add_objective = add_objective
+  let add_real_objective = add_real_objective (* Added *)
   let solve = solve
   let ideref = ideref
   let bderef = bderef
+  let rderef = rderef 
   let write_ctx = write_ctx
 end
 

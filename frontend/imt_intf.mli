@@ -104,11 +104,15 @@ module type S_access = sig
 
   val add_objective : ctx -> ivar isum -> [ `Duplicate | `Ok ]
 
+  val add_real_objective : ctx -> ivar rsum -> [ `Duplicate | `Ok ]
+
   val solve : ctx -> result
 
   val ideref : ctx -> ivar -> Int63.t option
 
   val bderef : ctx -> bvar -> bool option
+
+  val rderef : ctx -> ivar -> Float.t option
 
   val write_ctx : ctx -> string -> unit
 

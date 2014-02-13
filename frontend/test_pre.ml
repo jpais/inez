@@ -77,3 +77,29 @@ let e2 = ~logicr(roi(4 * y + 5 * y2) +. 3.5 *. x +. 2.8 *. x2 <=. 0.5);;
 let roi x = Logic.M.roi x ;;
 
 let dedup f = P.try_dedup_real_sum f;;
+
+let ideref = function
+  | Logic.M.M_Var v ->
+    S.deref_int sctx v
+  | _ ->
+    None ;;
+
+let rderef = function
+  | Logic.M.M_Var v ->
+    S.deref_real sctx v
+  | _ -> 
+    None ;;
+
+let rderef_print id v =
+  match rderef v with
+  | Some i ->
+    Printf.printf "%s = %s\n" id (Float.to_string_hum i)
+  | None ->
+    () ;;
+
+let ideref_print id v =
+  match ideref v with
+  | Some i ->
+    Printf.printf "%s = %s\n" id (Int63.to_string_hum i)
+  | None ->
+    () ;;

@@ -11,6 +11,8 @@ module type S = sig
 
   val solve : ctx -> Terminology.result
 
+  val solve_real : ctx -> Terminology.result
+
   val add_objective :
     ctx -> (c, int) Logic.M.t -> [> `Duplicate | `Ok]
 
@@ -22,6 +24,9 @@ module type S = sig
 
   val deref_bool :
     ctx -> (c, bool) Id.t -> bool option
+
+  val deref_real :
+    ctx -> (c, float) Id.t -> Core.Std.Float.t option 
 
   val write_bg_ctx : ctx -> string -> unit
 

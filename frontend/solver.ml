@@ -759,6 +759,21 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | None, false ->
       S.solve r_ctx
 
+  let solve_real ({r_ctx; r_obj} as r) =
+    bg_assert_all_cached r;
+    match r_obj, r.r_unsat with
+    | _, true ->
+      R_Unsat
+    | Some o, false ->
+      let l, _ = iexpr_of_flat_term_real r o in
+      (match S.add_real_objective r_ctx l with
+      | `Duplicate ->
+        raise (Unreachable.Exn _here_)
+      | `Ok ->
+        S.solve r_ctx)
+    | None, false ->
+      S.solve r_ctx
+
   let add_objective ({r_obj; r_pre_ctx} as r) o =
     match r_obj with
     | None ->
@@ -781,6 +796,9 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
 
   let deref_bool {r_ctx; r_bvar_m} id =
     Option.(Hashtbl.find r_bvar_m id >>= S.bderef r_ctx)
+
+  let deref_real {r_ctx; r_rvar_m} id =
+    Option.(Hashtbl.find r_rvar_m id >>= S.rderef r_ctx)
 
 (* 
 For testing purposes
