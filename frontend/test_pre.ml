@@ -21,14 +21,10 @@ let () =
 #load "pre.cmo" ;;
 #load "solver.cmo" ;;
 
-
 open Core.Std ;;
-
+open Script;;
 
 (*
-module P = Pre.Make (Id') ;;
-let ctx2 = P.make_ctx () ;;
-*)
 
 module Id' = Id.Make (struct end) ;;
 module P = Pre.Make(Id') ;;
@@ -53,6 +49,19 @@ let fresh_bool_var () =
     (Logic.A.A_Bool
        (Logic.M.M_Var (Id'.gen_id Type.Y_Bool))) ;;
 
+let constrain = S.assert_formula sctx;;
+
+let solve () =
+  S.solve_real sctx;;
+
+let minimize o = 
+  match S.add_real_objective sctx o with
+    | `Ok -> ()
+    | `Duplicate -> raise (Invalid_argument "The problem already has an objective")
+
+let write_ctx dir = 
+  S.write_bg_ctx sctx dir
+
 let flatten_formula g =
   P.flatten_formula ctx g ;;
 
@@ -67,17 +76,6 @@ let x2 = fresh_real_var();;
 let y  = fresh_int_var2();;
 let y2 = fresh_int_var2();;
 
-(*
-let e = ~logicr(0.5 *. x +. roi(4 * y + 5 * y2) +. 3.5 *. x +. 2.8 *. x2 +. roi(6 * y) =. 0.5) ;;
-
-let e2 = ~logicr(roi(4 * y + 5 * y2) +. 3.5 *. x +. 2.8 *. x2 <=. 0.5);;
-*)
-
-
-let roi x = Logic.M.roi x ;;
-
-let dedup f = P.try_dedup_real_sum f;;
-
 let ideref = function
   | Logic.M.M_Var v ->
     S.deref_int sctx v
@@ -89,6 +87,10 @@ let rderef = function
     S.deref_real sctx v
   | _ -> 
     None ;;
+
+*)
+
+let roi x = Logic.M.roi x ;;
 
 let rderef_print id v =
   match rderef v with

@@ -800,14 +800,7 @@ and ovar_of_term_real ({r_ctx; r_rvar_of_rsum_m} as r) = function
   let deref_real {r_ctx; r_rvar_m} id =
     Option.(Hashtbl.find r_rvar_m id >>= S.rderef r_ctx)
 
-(* 
-For testing purposes
-*)
+ 
 
- let xvar_formula ({r_pre_ctx} as r) g =
-    let g = P.flatten_formula r_pre_ctx g in
-    blast_formula r g
-
-(* end *)
 
 end

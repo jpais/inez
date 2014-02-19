@@ -7,7 +7,7 @@ module type Term = sig
     ('i, bool) t
   | M_Int   :  Core.Std.Int63.t ->
     ('i, int) t
-  | M_Float :  Core.Std.Float.t -> 
+  | M_Real :  Core.Std.Float.t -> 
     ('i, float) t
   | M_ROI   : ('i, int) t -> ('i, float) t
   | M_Sum   :  ('i, int) t * ('i, int) t ->
@@ -35,7 +35,7 @@ module type Term_with_ops = sig
 
   val zero : ('a, int) t
   val one : ('a, int) t
-  val zerof : ('a, float) t
+  val zeror : ('a, float) t
  
   val roi : ('a, int) t -> ('a, float) t
   

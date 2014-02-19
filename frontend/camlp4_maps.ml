@@ -75,7 +75,7 @@ let rec type_of_uf ?acc:(acc = []) =
   | <:expr< fun ($lid:_$ : Int) -> $e$ >>
   | <:expr< fun (_ : Int) -> $e$ >> ->
     type_of_uf ~acc:(Y_Int :: acc) e
-  | <:expr< fun (_ : Float) -> $e$ >> ->
+  | <:expr< fun (_ : Real) -> $e$ >> ->
     type_of_uf ~acc:(Y_Real :: acc) e
   | <:expr< fun ($lid:_$ : Bool) -> $e$ >>
   | <:expr< fun (_ : Bool) -> $e$ >> ->
@@ -83,7 +83,7 @@ let rec type_of_uf ?acc:(acc = []) =
   | <:expr< ~free >>
   | <:expr< (~free : Int) >> ->
     Some (List.rev acc, Y_Int)
-  | <:expr< (~free : Float) >> ->
+  | <:expr< (~free : Real) >> ->
     Some (List.rev acc, Y_Real)
   | <:expr< (~free : Bool) >> ->
     Some (List.rev acc, Y_Bool)
@@ -97,11 +97,11 @@ let map_uf mid mid' = object
   method expr = function
   | <:expr@loc< fun $lid:_$ -> $_$ >>
   | <:expr@loc< fun ($lid:_$ : Int) -> $_$ >>
-  | <:expr@loc< fun ($lid:_$ : Float) -> $_$ >>
+  | <:expr@loc< fun ($lid:_$ : Real) -> $_$ >>
   | <:expr@loc< fun ($lid:_$ : Bool) -> $_$ >>
   | <:expr@loc< fun _ -> $_$ >>
   | <:expr@loc< fun (_ : Int) -> $_$ >>
-  | <:expr@loc< fun (_ : Float) -> $_$ >>
+  | <:expr@loc< fun (_ : Real) -> $_$ >>
   | <:expr@loc< fun (_ : Bool) -> $_$ >> as e ->
     (match type_of_uf e with
     | Some y ->
@@ -149,13 +149,13 @@ let transform_real_logic_aux mid e =
   | <:expr< $uid:mid$.M.M_Int $x$ * $uid:mid'$.M.M_Int $y$ >>
       when mid = mid' ->  
     <:expr< $uid:mid$.M.M_Int (Int63.( * ) $x$ $y$) >>
-  | <:expr< $uid:mid$.M.M_Float $x$ *. $uid:mid'$.M.M_Float $y$ >>
+  | <:expr< $uid:mid$.M.M_Real $x$ *. $uid:mid'$.M.M_Real $y$ >>
       when mid = mid' ->
-    <:expr< $uid:mid$.M.M_Float (Float.( * ) $x$ $y$) >>
+    <:expr< $uid:mid$.M.M_Real (Float.( * ) $x$ $y$) >>
   | <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) * $x$ >> ->
     <:expr<
       $uid:mid$.M.M_Prod (Core.Std.Int63.of_string $str:s$, $x$) >>
-  | <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) *. $x$ >> ->
+  | <:expr< $uid:mid$.M.M_Real (Core.Std.Float.of_string $str:s$) *. $x$ >> ->
     <:expr<
       $uid:mid$.M.M_FProd (Core.Std.Float.of_string $str:s$, $x$) >>
   | <:expr< $uid:mid$.M.M_Int $i1$ * $uid:mid'$.M.M_Int $i2$ >>
@@ -168,7 +168,7 @@ let transform_real_logic_aux mid e =
   | <:expr< $int64:s$ >> ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) >>
   | <:expr< $flo:s$ >> ->
-    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >>
+    <:expr< $uid:mid$.M.M_Real (Core.Std.Float.of_string $str:s$) >>
 (*  | <:expr< $int64:s$ >> ->
     <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> *)
   | _ ->
@@ -199,5 +199,5 @@ let rec convert_real_sum = function
 			      Logic.M.M_FSum (t1',t2')
   | Logic.M.M_Prod (c,t) -> Logic.M.M_FProd(Core.Std.Int63.to_float c, convert_real_sum t)
   | Logic.M.M_Var x -> Logic.M.M_ROI (Logic.M.M_Var x)
-  | Logic.M.M_Int x -> Logic.M.M_Float (Core.Std.Int63.to_float x)
+  | Logic.M.M_Int x -> Logic.M.M_Real (Core.Std.Int63.to_float x)
   | _ -> raise (Failure "algo anda mal")

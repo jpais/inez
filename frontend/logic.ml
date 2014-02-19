@@ -15,7 +15,7 @@ struct
     ('i, bool) t
   | M_Int   :  Core.Std.Int63.t ->
     ('i, int) t
-  | M_Float : Core.Std.Float.t ->
+  | M_Real : Core.Std.Float.t ->
     ('i, float) t
   | M_ROI : ('i, int) t -> ('i, float) t
   | M_Sum   : ('i, int) t * ('i, int) t ->
@@ -37,7 +37,7 @@ struct
 
   let zero = M_Int Int63.zero
 
-  let zerof = M_Float Float.zero
+  let zeror = M_Real Float.zero
 
   let one = M_Int Int63.one
 
@@ -54,7 +54,7 @@ struct
         Type.Y_Bool
       | M_Int _ ->
         Type.Y_Int
-      | M_Float _ ->
+      | M_Real  _ ->
         Type.Y_Real
       | M_ROI _ -> 
 	Type.Y_Real
@@ -90,10 +90,10 @@ struct
 
   let ( +. ) a b =
     match a, b with
-    | M_Float x, M_Float y             -> M_Float (x +. y)
-    | M_Float x, _ when x = Float.zero -> b
-    | _, M_Float x when x = Float.zero -> a
-    | _                                -> M_FSum (a, b)
+    | M_Real x, M_Real y              -> M_Real (x +. y)
+    | M_Real x, _ when x = Float.zero -> b
+    | _, M_Real x when x = Float.zero -> a
+    | _                               -> M_FSum (a, b)
 
 
   let ( * ) c a =
@@ -104,7 +104,7 @@ struct
 
   let ( *. ) c a =
     if c = Float.zero then
-      zerof
+      zeror
     else
       M_FProd (c, a)
   
@@ -121,24 +121,24 @@ struct
 
   let ( -. ) a b =
     match a, b with
-    | M_Float x, M_Float y             -> M_Float ((-.) x y)
-    | M_Float x, _ when x = Float.zero -> (-1.0) *. b
-    | _, M_Float x when x = Float.zero -> a
-    | _                                -> a +. ((-1.0) *. b)
+    | M_Real x, M_Real y              -> M_Real ((-.) x y)
+    | M_Real x, _ when x = Float.zero -> (-1.0) *. b
+    | _, M_Real x when x = Float.zero -> a
+    | _                               -> a +. ((-1.0) *. b)
 
 
   let ( ~- ) a =
     zero - a
 
   let ( ~-. ) a =
-    zerof -. a
+    zeror -. a
 
   let sum l ~f =
     List.fold_left l ~init:zero
       ~f:(fun acc x -> acc + f x)
 
   let sumf l ~f =
-    List.fold_left l ~init:zerof
+    List.fold_left l ~init:zeror
       ~f:(fun acc x -> acc +. f x)
 
   let rec fold :
@@ -149,7 +149,7 @@ struct
       match m with
       | M_Int _ ->
         init
-      | M_Float _ ->
+      | M_Real _ ->
 	init 
       | M_Var _ ->
         init
@@ -208,7 +208,7 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
         M_Bool (Formula.map g ~polarity ~f)
       | M1.M_Int i ->
         M_Int i
-      | M1.M_Float i -> M_Float i
+      | M1.M_Real i -> M_Real i
       | M1.M_ROI x -> M_ROI (map x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map a ~f ~fv + map b ~f ~fv
@@ -245,7 +245,7 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
         M_Bool (Formula.map_non_atomic g ~polarity ~f)
       | M1.M_Int i ->
         M_Int i
-      | M1.M_Float i -> M_Float i
+      | M1.M_Real i -> M_Real i
       | M1.M_ROI x -> M_ROI (map_non_atomic x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map_non_atomic a ~f ~fv + map_non_atomic b ~f ~fv
@@ -317,7 +317,7 @@ module Ops = struct
 
   let iitef c a b = M.M_FIte (c, a, b)
 
-  let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. M_Float 1.0 -. b)))
+  let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. M_Real 1.0 -. b)))
 
   let (<=.) a b = Formula.F_Atom (A_LeF M.(a -. b))
 

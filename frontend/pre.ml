@@ -36,12 +36,6 @@ module Make (I : Id.Accessors) = struct
   and sumt =
     Int63.t * term_base
 
-(*  and new_sumt = 
-    | IntC   of Int63.t * term_base
-    | FloatC of Float.t * term_base
-
-  and new_sum = new_sumt list
-*)
   and sumtf = 
     Float.t * term_base
 
@@ -193,25 +187,6 @@ module Make (I : Id.Accessors) = struct
 
   let sum_negate (l, x) =
     List.map l ~f:(Tuple2.map1 ~f:Int63.neg), Int63.neg x
-
-  (* flatten terms and formulas; SCC impractical to break 
-  let dedup_sum l =
-    let l = List.sort ~cmp:compare_sumt l in
-    let rec loop ~acc = function
-      | [] ->
-        acc
-      | hd :: [] ->
-        hd :: acc
-      | (c1, m1) :: (c2, m2) :: d when compare_term_base m1 m2 = 0 ->
-        loop ~acc ((Int63.(c1 + c2), m1) :: d)
-      | (c, m) :: d when c = Int63.zero ->
-        loop ~acc d
-      | a :: d ->
-        loop ~acc:(a :: acc) d in
-    loop ~acc:[] l
-  *)
-
-  
 
   let dedup_sum l =
     let l = List.sort ~cmp:compare_sumt l in
@@ -496,14 +471,14 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
       G_Base (make_iite r c s t)
     | M.M_App (f, t) ->
       G_Base (B_App (flatten_args r [flatten_term r t] f))
-    | M.M_Float _ | M.M_FSum (_, _) | M.M_FProd (_, _) as t->
+    | M.M_Real _ | M.M_FSum (_, _) | M.M_FProd (_, _) as t->
       let d, x = [], Float.zero in
       let d, x = flatten_real_term_sum r (d,x) (1.0) t in
       G_SumF (make_real_sum r d x)
     
   and flatten_real_term_sum r (d,x) k = function
     | M.M_Var v -> (k, B_VarF v) :: d,x
-    | M.M_Float i -> d, Float.(x +. k *. i)
+    | M.M_Real i -> d, Float.(x +. k *. i)
     | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
                    let l, c = make_real k d_aux x_aux in
 		   (List.append d l), x +. c
