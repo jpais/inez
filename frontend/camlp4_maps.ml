@@ -144,8 +144,8 @@ let transform_real_logic_aux mid e =
     <:expr< Formula.F_True >>
   | <:expr< false >> ->
     <:expr< Formula.(F_Not F_True) >>
-  | <:expr< $uid:mid$.M.M_ROI $x$ >> ->
-    <:expr< $uid:mid$.M.M_ROI (transform_logic_aux $x$) >>
+  | <:expr< $uid:mid$.M.M_ROI($x$) >> ->
+    <:expr< $uid:mid$.(convert_real_sum $x$) >>
   | <:expr< $uid:mid$.M.M_Int $x$ * $uid:mid'$.M.M_Int $y$ >>
       when mid = mid' ->  
     <:expr< $uid:mid$.M.M_Int (Int63.( * ) $x$ $y$) >>
@@ -192,3 +192,12 @@ let transform_logic mid = function
 
 let map_logic mid =
   Ast.map_expr (transform_logic mid)
+
+let rec convert_real_sum = function
+  | Logic.M.M_Sum (t1, t2) -> let t1' = convert_real_sum t1
+                              and t2' = convert_real_sum t2 in
+			      Logic.M.M_FSum (t1',t2')
+  | Logic.M.M_Prod (c,t) -> Logic.M.M_FProd(Core.Std.Int63.to_float c, convert_real_sum t)
+  | Logic.M.M_Var x -> Logic.M.M_ROI (Logic.M.M_Var x)
+  | Logic.M.M_Int x -> Logic.M.M_Float (Core.Std.Int63.to_float x)
+  | _ -> raise (Failure "algo anda mal")

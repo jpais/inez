@@ -62,7 +62,7 @@ Camlp4o_lib(module, libs, pa_names) =
 
 Camlp4o_nopacks(module) =
     section
-        OCAMLPACKS = camlp4
+        OCAMLPACKS = camlp4 core
         OCAMLDEPFLAGS += -pp camlp4of.opt
         OCAMLFLAGS += -pp camlp4of.opt
         $(module).cmi:

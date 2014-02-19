@@ -228,26 +228,6 @@ module Make (I : Id.Accessors) = struct
         loop ~acc:(a :: acc) d in
     loop ~acc:[] l
 
- (* let dedup_sum_new l =
-    let l = List.sort ~cmp:compare_new_sumt l in
-    let rec loop ~acc = function
-      | [] ->
-        acc
-      | hd :: [] ->
-        hd :: acc
-      | (IntC (c1, m1)) :: (IntC (c2, m2)) :: d when compare_term_base m1 m2 = 0 ->
-        loop ~acc ((IntC (Int63.(c1 + c2), m1)) :: d)
-      | (FloatC (c1, m1)) :: (FloatC (c2, m2)) :: d when compare_term_base m1 m2 = 0 ->
-        loop ~acc ((FloatC (Float.(c1 +. c2), m1)) :: d)
-      | (IntC (c, m)) :: d when c = Int63.zero ->
-        loop ~acc d
-      | (FloatC (c, m)) :: d when c = Float.zero ->
-        loop ~acc d
-      | a :: d ->
-        loop ~acc:(a :: acc) d in
-    loop ~acc:[] l
- *)
-
   let try_dedup_real_sum = function 
     | H_Float (G_SumF (l, o)) -> let ordenador (n1,v1) (n2, v2) = 
 				   if compare_term_base v1 v2 = 0
@@ -272,19 +252,15 @@ module Make (I : Id.Accessors) = struct
     loop ~acc:[] l
 
 
-  let rec make_real d x =
+  let rec make_real k d x =
     match d with
       | [] -> [], Int63.to_float(x)
-      | (c,t) :: tl -> let new_tl, new_x = make_real tl x in
-			 (Int63.to_float c, t) :: new_tl, new_x 
+      | (c,t) :: tl -> let new_tl, new_x = make_real k tl x in
+			 (k *. (Int63.to_float c), t) :: new_tl, new_x 
 
  let make_sum {r_sharing = {s_sum_h}} l o =
     let l = dedup_sum l in
     Hashtbl.find_or_add s_sum_h l ~default:(fun () -> l), o
-
-(*  let make_sum_new {r_sharing = {s_new_sum_h}} l o =
-    let l = dedup_sum l in
-    Hashtbl.find_or_add s_new_sum_h l ~default:(fun () -> l), o *)
 
   let make_real_sum {r_sharing = {s_sumr_h}} l o =
     let l = dedup_real_sum l in
@@ -373,40 +349,6 @@ module Make (I : Id.Accessors) = struct
         Float.(o1 -. o2)
     | _ -> None
 
- (* 
-  let equal_modulo_offset_float a b =
-    match a, b with
-    | G_Base b1, G_Base b2 ->
-      Option.some_if
-        (compare_term_base b1 b2 = 0)
-        Float.zero
-    | G_Sum ([c, b1], o), G_Base b2 ->
-      Option.some_if
-        (c = Int63.one && compare_term_base b1 b2 = 0)
-        (Int63.to_float o)
-    | G_Base b2, G_Sum ([c, b1], o) ->
-      Option.some_if
-        (c = Int63.one && compare_term_base b1 b2 = 0)
-        (Float.neg (Int63.to_float o))
-    | G_Sum (s1, o1), G_Sum (s2, o2) ->
-      Option.some_if
-        (compare_sum s1 s2 = 0)
-        (Int63.to_float(Int63.(o1 - o2)))
-    | G_SumF ([c, b1], o), G_Base b2 ->
-      Option.some_if
-        (c = (1.0) && compare_term_base b1 b2 = 0)
-        o
-    | G_Base b2, G_SumF ([c, b1], o) ->
-      Option.some_if
-        (c = (1.0) && compare_term_base b1 b2 = 0)
-        (Float.neg o)
-    | G_SumF (s1, o1), G_SumF (s2, o2) ->
-      Option.some_if
-        (compare_sumf s1 s2 = 0)
-        Float.(o1 -. o2)
-    | _ ->
-      None
- *)
   let sum_of_term = function
     | G_Sum s ->
       s
@@ -518,22 +460,6 @@ module Make (I : Id.Accessors) = struct
       let d, x = flatten_int_term_sum r (d, x) Int63.one t in
       G_Sum (make_sum r d x)
 
-(* and flatten_int_term_aux_new ({r_sharing = {s_sum_h}} as r) = function
-    | M.M_Var v ->
-      G_Base (B_Var v)
-    | M.M_Ite (c, s, t) ->
-      let c = flatten_formula r c
-      and s = flatten_int_term r s
-      and t = flatten_int_term r t in
-      G_Base (make_iite r c s t)
-    | M.M_App (f, t) ->
-      G_Base (B_App (flatten_args r [flatten_term r t] f))
-    | M.M_Int _ | M.M_Sum (_, _) | M.M_Prod (_, _) as t ->
-      let d, x = [], Float.zero in               (*Convedra que sea float?*)
-      let d, x = flatten_int_term_sum r (d, x) (Float.(1.0)) t in
-      G_SumF (make_sumf r d x)
-*)
-
 and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     match t with
     | M.M_Var v ->
@@ -559,32 +485,6 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
       | None ->
         (k, make_iite r c s t) :: d, x)
 
- (* and flatten_int_term_sum_new r (d, x) k (t : (_, int) M.t) =   (*Cambio todas las operaciones sobre x para que sean tipo float *)
-    match t with
-    | M.M_Var v ->
-      (k, B_Var v) :: d, x
-    | M.M_Int i ->
-      d, Float.(x +. k *. Int63.to_float(i))
-    | M.M_App (f, t) ->
-      let a = flatten_args r [flatten_term r t] f in
-      (k, B_App a) :: d, x
-    | M.M_Sum (s, t) ->
-      let d, x = flatten_int_term_sum r (d, x) k s in
-      flatten_int_term_sum r (d, x) k t
-    | M.M_Prod (k2, t) ->
-      flatten_int_term_sum r (d, x) Float.(k *. Int63.to_float(k2)) t
-    | M.M_Ite (c, s, t) ->
-      let c = flatten_formula r c
-      and s = flatten_int_term r s 
-      and t = flatten_int_term r t in
-      (match equal_modulo_offset s t with
-      | Some o ->
-        let d, x = inline_term r (d, x) k t in
-        (Float.(k *. o), B_Formula c) :: d, x
-      | None ->
-        (k, make_iite r c s t) :: d, x) 
- *)
-
   and flatten_real_term_aux ({r_sharing={s_sumr_h}} as r) = function
     | M.M_Var v ->
       G_Base (B_VarF v)
@@ -605,7 +505,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | M.M_Var v -> (k, B_VarF v) :: d,x
     | M.M_Float i -> d, Float.(x +. k *. i)
     | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
-                   let l, c = make_real d_aux x_aux in
+                   let l, c = make_real k d_aux x_aux in
 		   (List.append d l), x +. c
     | M.M_App (f, t) ->
       let a = flatten_args r [flatten_term r t] f in
