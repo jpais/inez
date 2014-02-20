@@ -39,11 +39,19 @@ module Make (I : Id.Accessors) = struct
   and sumtf = 
     Float.t * term_base
 
+  and summ = 
+    | S_Int of Int63.t * term_base
+    | S_Real of Float.t * term_base
+
   and sum =
     sumt list
 
   and sumf = 
     sumtf list
+
+  and suml =
+    summ list
+
 
   and iite =
     formula * term * term
@@ -56,9 +64,11 @@ module Make (I : Id.Accessors) = struct
   | B_Ite      of  iite
 
   and term =
-  | G_Base  of  term_base
-  | G_Sum   of  sum  Terminology.offset 
-  | G_SumF  of  sumf Terminology.roffset  
+  | G_Base   of  term_base
+  | G_Sum    of  sum  Terminology.offset 
+  | G_SumF   of  sumf Terminology.roffset
+  | G_SumMI  of  suml Terminology.offset
+  | G_SumMR  of  suml Terminology.roffset  
 
   and bite = formula * formula * formula
 
@@ -90,6 +100,13 @@ module Make (I : Id.Accessors) = struct
     compare = compare_sumf;
     hash = Hashtbl.hash;
     sexp_of_t = sexp_of_sumf
+  }
+  
+  let hashable_suml = {
+    Hashtbl.Hashable.
+    compare = compare_suml;
+    hash = Hashtbl.hash;
+    sexp_of_t = sexp_of_suml
   }
 
   let hashable_args = {
@@ -141,6 +158,7 @@ module Make (I : Id.Accessors) = struct
 
     s_sum_h    :  (sum, sum) Hashtbl.t;
     s_sumr_h   :  (sumf, sumf) Hashtbl.t;
+    s_suml_h   :  (suml, suml) Hashtbl.t;   (* mixed int/float type*)
     s_args_h   :  (args, args) Hashtbl.t;
     s_iite_h   :  (iite, term_base) Hashtbl.t;
     s_bite_h   :  (bite, formula) Hashtbl.t;
@@ -165,6 +183,7 @@ module Make (I : Id.Accessors) = struct
   let make_sharing_ctx () = {
     s_sum_h   = Hashtbl.create () ~size:2048 ~hashable:hashable_sum;
     s_sumr_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_rsum;
+    s_suml_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_suml;
     s_args_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_args;
     s_iite_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_iite;
     s_bite_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_bite;
@@ -203,19 +222,11 @@ module Make (I : Id.Accessors) = struct
         loop ~acc:(a :: acc) d in
     loop ~acc:[] l
 
-  let try_dedup_real_sum = function 
-    | H_Float (G_SumF (l, o)) -> let ordenador (n1,v1) (n2, v2) = 
-				   if compare_term_base v1 v2 = 0
-				   then Float.to_int(Float.(n1 - n2))
-				   else compare_term_base v1 v2 in
-				 List.sort ~cmp:ordenador l
-    | _ -> raise (Unreachable.Exn _here_)
-  
+   
   let dedup_real_sum l =
     let sorter (n1,v1) (n2, v2) = if compare_term_base v1 v2 = 0
 				  then Float.to_int(Float.(n1 - n2))
-				  else compare_term_base v1 v2 in
-			 
+				  else compare_term_base v1 v2 in			 
     let l = List.sort ~cmp:sorter l in
     let rec loop ~acc = function
       | [] -> acc
@@ -225,6 +236,21 @@ module Make (I : Id.Accessors) = struct
       | (c, m) :: d when c = Float.zero -> loop ~acc d
       | a :: d -> loop ~acc:(a :: acc) d in
     loop ~acc:[] l
+
+  let dedup_mixed_sum l =
+    let l = List.sort ~cmp:compare_summ l in
+    let rec loop ~acc = function
+      | [] -> acc
+      | hd :: [] -> hd :: acc
+      | (S_Int (c1, m1)) :: (S_Int (c2, m2)) :: d when compare_term_base m1 m2 = 0 ->
+	loop ~acc ((S_Int (Int63.(c1 + c2), m1)) :: d)
+      | (S_Real (c1, m1)) :: (S_Real (c2, m2)) :: d when compare_term_base m1 m2 = 0 ->
+	loop ~acc ((S_Real (Float.(c1 +. c2), m1)) :: d)
+      | (S_Int (c, m))  :: d when c = Int63.zero -> loop ~acc d
+      | (S_Real (c, m)) :: d when c = Float.zero -> loop ~acc d
+      | a :: d -> loop ~acc:(a :: acc) d in
+    loop ~acc:[] l
+
 
 
   let rec make_real k d x =
@@ -240,6 +266,10 @@ module Make (I : Id.Accessors) = struct
   let make_real_sum {r_sharing = {s_sumr_h}} l o =
     let l = dedup_real_sum l in
     Hashtbl.find_or_add s_sumr_h l ~default:(fun()->l), o
+
+  let make_mixed_sum {r_sharing = {s_suml_h}} l o = 
+    let l = dedup_mixed_sum l in
+    Hashtbl.find_or_add s_suml_h l ~default:(fun()->l), o
  
   let make_args {r_sharing = {s_args_h}} l =
     Hashtbl.find_or_add s_args_h l ~default:(fun () -> l)
@@ -433,9 +463,9 @@ module Make (I : Id.Accessors) = struct
     | M.M_Int _ | M.M_Sum (_, _) | M.M_Prod (_, _) as t ->
       let d, x = [], Int63.zero in
       let d, x = flatten_int_term_sum r (d, x) Int63.one t in
-      G_Sum (make_sum r d x)
+      G_SumMI (make_mixed_sum r d x)
 
-and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
+(*and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     match t with
     | M.M_Var v ->
       (k, B_Var v) :: d, x
@@ -459,6 +489,34 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
         (Int63.(k * o), B_Formula c) :: d, x
       | None ->
         (k, make_iite r c s t) :: d, x)
+*)
+
+and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
+    match t with
+    | M.M_Var v ->
+      (S_Int (k, B_Var v)) :: d, x
+    | M.M_Int i ->
+      d, Int63.(x + k * i)
+    | M.M_App (f, t) ->
+      let a = flatten_args r [flatten_term r t] f in
+      (S_Int (k, B_App a)) :: d, x
+    | M.M_Sum (s, t) ->
+      let d, x = flatten_int_term_sum r (d, x) k s in
+      flatten_int_term_sum r (d, x) k t
+    | M.M_Prod (k2, t) ->
+      flatten_int_term_sum r (d, x) Int63.(k * k2) t
+    | M.M_Ite (c, s, t) ->
+      let c = flatten_formula r c
+      and s = flatten_int_term r s 
+      and t = flatten_int_term r t in
+      (match equal_modulo_offset s t with
+      | Some o ->
+        let d, x = inline_term r (d, x) k t in
+        (S_Int (Int63.(k * o), B_Formula c)) :: d, x
+      | None ->
+        (S_Int (k, make_iite r c s t)) :: d, x)
+
+
 
   and flatten_real_term_aux ({r_sharing={s_sumr_h}} as r) = function
     | M.M_Var v ->
@@ -472,11 +530,11 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | M.M_App (f, t) ->
       G_Base (B_App (flatten_args r [flatten_term r t] f))
     | M.M_Real _ | M.M_FSum (_, _) | M.M_FProd (_, _) as t->
-      let d, x = [], Float.zero in
-      let d, x = flatten_real_term_sum r (d,x) (1.0) t in
-      G_SumF (make_real_sum r d x)
+      let d, xi, xr = [], Int63.zero, Float.zero in
+      let d, xi, xr = flatten_real_term_sum r (d, xi, xr) (1.0) t in
+      G_SumMR (make_mixed_sum r d xr)
     
-  and flatten_real_term_sum r (d,x) k = function
+ (* and flatten_real_term_sum r (d,x) k = function
     | M.M_Var v -> (k, B_VarF v) :: d,x
     | M.M_Real i -> d, Float.(x +. k *. i)
     | M.M_ROI i -> let d_aux,x_aux = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
@@ -500,6 +558,82 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
 	  (Float.(k *. o), B_Formula c) :: d, x
 	|None ->
 	  (k, make_iite r c s t) :: d, x)
+
+ *)
+
+ and flatten_real_term_sum r (d, xi, xr) k = function
+    | M.M_Var v -> (S_Real (k, B_VarF v)):: d, xi, xr
+    | M.M_Real i -> d, xi, Float.(xr +. k *. i)
+    | M.M_ROI i -> let d, xi = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
+		   d, xi, xr
+    | M.M_App (f, t) ->
+      let a = flatten_args r [flatten_term r t] f in
+      (S_Real (k, B_App a)) :: d, xi, xr
+    | M.M_FSum(s, t) -> 
+      let d, x = flatten_real_term_sum r (d, xi, xr) k s in
+      flatten_real_term_sum r (d, xi, xr) k t
+    | M.M_FProd(k2, t) ->
+      flatten_real_term_sum r (d, xi, xr) Float.(k *. k2) t
+    | M.M_FIte(c,s,t) ->
+      let c = flatten_formula r c
+      and s = flatten_real_term r s 
+      and t = flatten_real_term r t in
+      (match equal_modulo_real_offset s t with
+	|Some o ->
+	  let d, xr = inline_term_real r (d, xr) k t in  
+	  (S_Real (Float.(k *. o), B_Formula c)) :: d, xi, xr
+	|None ->
+	  (S_Real (k, make_iite r c s t)) :: d, xi, xr)
+
+  (*and flatten_mixed_term_sum r (d, xi, xr) ki kr = function
+    | M.M_Var v -> (match I.type_of_t v with
+	              | Type.Y_Int  -> (S_Int  (ki, B_Var v))  :: d,xi,xr
+ 		      | Type.Y_Real -> (S_Real (kr, B_VarF v)) :: d,xi,xr
+		      | _ -> raise (Failure ""))
+    | M.M_Int i -> d, Int63.(xi + ki * i), xr
+    | M.M_ROI i -> let d_aux,x_aux = flatten_mixed_term_sum r ([],Int63.zero,) Int63.one i in
+                   let l, c = make_real k d_aux x_aux in 
+		   (List.append d l), x +. c
+    | M.M_App (f, t) -> (match M.type_of_t (M.M_App (f,t)) ~f:I.type_of_t' with
+	                  | Type.Y_Int  -> let a = flatten_args r [flatten_term r t] f in
+					  (S_Int (ki, B_App a)) :: d, xi, xr
+			  | Type.Y_Real -> let a =  flatten_args r [flatten_term r t] f in
+					   (S_Real (fr, B_App a)) :: d, xi, xr 
+			  | _ -> raise (Failure "" ))
+
+    | M.M_Sum (s, t) ->
+      let d, xi = flatten_mixed_term_sum r (d, xi, xr) ki kr s in
+      flatten_mixed_term_sum r (d, xi, xr) ki kr t
+    | M.M_Prod (k2, t) ->
+      flatten_mixed_term_sum r (d, xi, xr) Int63.(ki * k2) kr t
+    |M.M_Ite (c, s, t) ->
+      let c = flatten_formula r c
+      and s = flatten_int_term r s 
+      and t = flatten_int_term r t in
+      (match equal_modulo_offset s t with
+      | Some o ->
+        let d, xi = inline_term r (d, xi) ki t in
+        (Int63.(ki * o), B_Formula c) :: d, xi
+      | None ->
+        (ki, make_iite r c s t) :: d, xi)   
+    | M.M_Real i -> d, xi, Float.(xr +. kr *. i)       
+    | M.M_FSum(s, t) -> 
+      let d, xi, xr = flatten_mixed_term_sum r (d, xi, xr) ki kr s in
+      flatten_mixed_term_sum r (d, xi, xr) ki kr t
+    | M.M_FProd(k2, t) ->
+      flatten_mixed_term_sum r (d, xi, xr) ki (Float.(k *. k2)) t
+    | M.M_FIte(c,s,t) -> 
+      let c = flatten_formula r c
+      and s = flatten_real_term r s 
+      and t = flatten_real_term r t in
+      (match equal_modulo_real_offset s t with
+	|Some o ->
+	  let d, xr = inline_term_real r (d, xr) kr t in  
+	  (Float.(kr *. o), B_Formula c) :: d, xr
+	|None ->
+	  (kr, make_iite r c s t) :: d, xr)
+  *)
+
  
   and flatten_bool_term_aux r = function
     | M.M_Var v ->

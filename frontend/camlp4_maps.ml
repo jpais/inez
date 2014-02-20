@@ -144,8 +144,8 @@ let transform_real_logic_aux mid e =
     <:expr< Formula.F_True >>
   | <:expr< false >> ->
     <:expr< Formula.(F_Not F_True) >>
-  | <:expr< $uid:mid$.M.M_ROI($x$) >> ->
-    <:expr< $uid:mid$.(convert_real_sum $x$) >>
+  | <:expr< $uid:mid$.M.M_ROI $x$ >> ->
+    <:expr< $uid:mid$.(transform_real_logic_aux $x$) >>
   | <:expr< $uid:mid$.M.M_Int $x$ * $uid:mid'$.M.M_Int $y$ >>
       when mid = mid' ->  
     <:expr< $uid:mid$.M.M_Int (Int63.( * ) $x$ $y$) >>
@@ -161,16 +161,12 @@ let transform_real_logic_aux mid e =
   | <:expr< $uid:mid$.M.M_Int $i1$ * $uid:mid'$.M.M_Int $i2$ >>
       when mid = mid' ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.(i1 * i2)) >>
-(*  | <:expr< $int:s$ >> ->
-    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> *)
   | <:expr< $int:s$ >> ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) >>
   | <:expr< $int64:s$ >> ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.of_string $str:s$) >>
   | <:expr< $flo:s$ >> ->
     <:expr< $uid:mid$.M.M_Real (Core.Std.Float.of_string $str:s$) >>
-(*  | <:expr< $int64:s$ >> ->
-    <:expr< $uid:mid$.M.M_Float (Core.Std.Float.of_string $str:s$) >> *)
   | _ ->
     e
 
@@ -193,11 +189,4 @@ let transform_logic mid = function
 let map_logic mid =
   Ast.map_expr (transform_logic mid)
 
-let rec convert_real_sum = function
-  | Logic.M.M_Sum (t1, t2) -> let t1' = convert_real_sum t1
-                              and t2' = convert_real_sum t2 in
-			      Logic.M.M_FSum (t1',t2')
-  | Logic.M.M_Prod (c,t) -> Logic.M.M_FProd(Core.Std.Int63.to_float c, convert_real_sum t)
-  | Logic.M.M_Var x -> Logic.M.M_ROI (Logic.M.M_Var x)
-  | Logic.M.M_Int x -> Logic.M.M_Real (Core.Std.Int63.to_float x)
-  | _ -> raise (Failure "algo anda mal")
+
