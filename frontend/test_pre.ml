@@ -24,14 +24,29 @@ let () =
 open Core.Std ;;
 open Script;;
 
-(*
+let roi x = Logic.M.roi x ;;
 
+let rderef_print id v =
+  match rderef v with
+  | Some i ->
+    Printf.printf "%s = %s\n" id (Float.to_string_hum i)
+  | None ->
+    () ;;
+
+let ideref_print id v =
+  match ideref v with
+  | Some i ->
+    Printf.printf "%s = %s\n" id (Int63.to_string_hum i)
+  | None ->
+    () ;;
+
+(*
 module Id' = Id.Make (struct end) ;;
 module P = Pre.Make(Id') ;;
 let ctx = P.make_ctx();;
                                            
 module S = Solver.Make(Scip.Scip_basic)(Id') ;;
-                                                                                
+                                                                              
 let sctx = S.make_ctx (Scip.Scip_basic.make_ctx ()) ;;
 
 type c = Id'.c
@@ -88,9 +103,7 @@ let rderef = function
   | _ -> 
     None ;;
 
-*)
 
-let roi x = Logic.M.roi x ;;
 
 let rderef_print id v =
   match rderef v with
@@ -105,3 +118,4 @@ let ideref_print id v =
     Printf.printf "%s = %s\n" id (Int63.to_string_hum i)
   | None ->
     () ;;
+*)

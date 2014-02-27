@@ -72,11 +72,6 @@ module type S_with_holes = sig
   val bvar_of_id :
     ctx -> (c, bool) Id.t -> bvar
 
-(* For testing purposes *)
-    
-  val xvar_formula : ctx -> c Logic.A.t Formula.t -> xvar
-(* end *)
-
   val bg_assert_all_cached : ctx -> unit
 
 end

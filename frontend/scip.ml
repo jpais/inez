@@ -498,7 +498,7 @@ module Scip_with_dp = struct
     (D : Imt_intf.S_dp
      with type ivar_plug := ivar
      and  type bvar_plug := bvar
-     and  type rvar_plug := rvar) =
+    (* and  type rvar_plug := rvar  *)) =
 
   struct
 
@@ -565,7 +565,7 @@ module Scip_with_dp = struct
 
     let register_bvar = register_var
 
-    let register_rvar = register_var
+(*    let register_rvar = register_var *)
 
   end
 

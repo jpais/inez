@@ -105,7 +105,7 @@ struct
   let ( *. ) c a =
     if c = Float.zero then
       zeror
-    else
+    else 
       M_FProd (c, a)
   
   let ( - ) a b =
@@ -287,9 +287,9 @@ module Ops = struct
            with type ('i, 'q) t := ('i, 'q) M.t
            and type int_plug := Int63.t)
 
-  include (M : Ops_intf.Float
+  include (M : Ops_intf.Real
            with type ('i, 'q) t := ('i, 'q) M.t
-           and type float_plug := Float.t)
+           and type real_plug := Float.t)
 
   include A 
 
@@ -315,7 +315,7 @@ module Ops = struct
 
   let (>) a b = b < a
 
-  let iitef c a b = M.M_FIte (c, a, b)
+  let iiter c a b = M.M_FIte (c, a, b)
 
   let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. M_Real 1.0 -. b)))
 

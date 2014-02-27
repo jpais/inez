@@ -61,8 +61,8 @@ module type Term_with_ops = sig
                         and type int_plug := Core.Std.Int63.t)
 
   (* FLOAT infix operators *)
-  include (Ops_intf.Float with type ('i, 's) t := ('i, 's) t
-                          and type float_plug := Core.Std.Float.t)	    
+  include (Ops_intf.Real with type ('i, 's) t := ('i, 's) t
+                          and type real_plug := Core.Std.Float.t)	    
 end
 
 module type Atom = sig

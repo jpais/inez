@@ -21,7 +21,7 @@ with compare, sexp
 type 'v offset          =  'v * Core.Std.Int63.t
 with compare, sexp
 
-type 'v roffset    =  'v * Core.Std.Float.t
+type 'v roffset         =  'v * Core.Std.Float.t
 with compare, sexp
 
 type 'v isum            =  'v monomial list

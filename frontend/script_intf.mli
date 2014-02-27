@@ -33,4 +33,6 @@ module type S = sig
 
   val string_of_result : Terminology.result -> string
 
+  val write_ctx : string -> unit
+
 end

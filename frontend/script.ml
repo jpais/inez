@@ -25,6 +25,8 @@ let fresh_bool_var () =
 let fresh_real_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Real);;
 
+let roi x = Logic.M.roi x ;;
+
 let ideref = function
   | Logic.M.M_Var v ->
     S.deref_int ctx v
@@ -73,3 +75,6 @@ let minimize_real o =
   match S.add_real_objective ctx o with
     | `Ok -> ()
     | `Duplicate -> raise (Invalid_argument "The problem already has an objective")
+
+let write_ctx path=
+  S.write_bg_ctx ctx path

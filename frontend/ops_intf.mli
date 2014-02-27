@@ -40,17 +40,17 @@ module type Int = sig
 
 end
 
-module type Float = sig
+module type Real = sig
    
     type (_,_) t
-    type float_plug
+    type real_plug
 
     val ( ~-. ) : ('i, float) t -> ('i, float) t
 
     (* infix operators *)
 
     val ( +. ) : ('i, float) t -> ('i, float) t -> ('i, float) t
-    val ( *. ) : float_plug -> ('i, float) t -> ('i, float) t
+    val ( *. ) : real_plug -> ('i, float) t -> ('i, float) t
     val ( -. ) : ('i, float) t -> ('i, float) t -> ('i, float) t
 
     (* pseudo-quantifiers *)
@@ -90,29 +90,29 @@ module type Mixed = sig
 
 end
 
-module type MixedF = sig
+module type MixedReal = sig
 
     type (_,_) t
 
-    type _ atomf_plug
+    type _ real_atom_plug
 
-    type _ formulaf_plug
+    type _ real_formula_plug
 
-    val iitef : 'i atomf_plug formulaf_plug ->
+    val iiter : 'i real_atom_plug real_formula_plug ->
        ('i, float) t -> ('i, float) t -> ('i, float) t
 
-    val (<.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
-    val (<=.) : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
-    val (=.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
-    val (>=.) : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
-    val (>.)  : ('i, float) t -> ('i, float) t -> 'i atomf_plug formulaf_plug
+    val (<.)  : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug
+    val (<=.) : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug
+    val (=.)  : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug
+    val (>=.) : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug
+    val (>.)  : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug
 
 end
 
 module type All = sig
   include Mixed
-  include MixedF with type ('i, 's) t := ('i, 's) t
+  include MixedReal with type ('i, 's) t := ('i, 's) t
   include Int with type ('i, 's) t := ('i, 's) t
-  include Float with type ('i,'s) t := ('i, 's) t
+  include Real with type ('i,'s) t := ('i, 's) t
   include Prop with type 'i t := 'i formula_plug
 end

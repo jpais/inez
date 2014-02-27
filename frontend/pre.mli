@@ -10,7 +10,7 @@ module Make : functor (I : Id.Accessors) -> sig
 
   and sumt = Core.Std.Int63.t * term_base
 
-  and sumtf = Core.Std.Float.t * term_base
+  (*and sumtf = Core.Std.Float.t * term_base*)
 
   and summ = private
 	     | S_Int of Core.Std.Int63.t * term_base
@@ -18,15 +18,15 @@ module Make : functor (I : Id.Accessors) -> sig
 
   and sum = sumt list
 
-  and sumf = sumtf list
+ (* and sumf = sumtf list*)
 
   and suml = summ list
 
   and iite = formula * term * term
 
   and term_base = private
-                  | B_Var      of  (I.c, int) Id.t
-		  | B_VarF     of  (I.c, float) Id.t
+                  | B_IVar     of  (I.c, int) Id.t
+		  | B_RVar     of  (I.c, float) Id.t
                   | B_Formula  of  formula
                   | B_App      of  app
                   | B_Ite      of  iite
@@ -34,9 +34,9 @@ module Make : functor (I : Id.Accessors) -> sig
   and term = private
              | G_Base  of  term_base
 	     | G_Sum   of  sum Terminology.offset
-             | G_SumF  of  sumf Terminology.roffset
-	     | G_SumMI  of  suml Terminology.offset
-	     | G_SumMR  of  suml Terminology.roffset  
+	     | G_SumM  of  suml Terminology.roffset
+        (* | G_SumF  of  sumf Terminology.roffset *)
+	    
 
   and bite = formula * formula * formula
 
@@ -51,7 +51,7 @@ module Make : functor (I : Id.Accessors) -> sig
   with compare
 
   val hashable_sum : sum Core.Std.Hashtbl.Hashable.t
-  val hashable_rsum : sumf Core.Std.Hashtbl.Hashable.t
+  (*val hashable_rsum : sumf Core.Std.Hashtbl.Hashable.t*)
   val hashable_suml : suml Core.Std.Hashtbl.Hashable.t
   val hashable_args : args Core.Std.Hashtbl.Hashable.t
   val hashable_iite : iite Core.Std.Hashtbl.Hashable.t
@@ -70,7 +70,7 @@ module Make : functor (I : Id.Accessors) -> sig
   val flatten_bool_term :
     ctx -> (I.c, bool) Logic.M.t -> formula
 
-  val flatten_real_term:
+  val flatten_mixed_term:
     ctx -> (I.c, float) Logic.M.t -> term
 
   val flatten_formula :

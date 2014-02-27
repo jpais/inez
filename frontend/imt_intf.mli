@@ -6,15 +6,15 @@ module type S_types = sig
   (** context *)
   type ctx
 
-  (** integer variable *)
+  (** integer/real variable *)
   type ivar
 
   (** boolean variable *)
   type bvar
 
-  (** real variable*)
+(*  (** real variable*)
   type rvar
-
+*)
   val compare_ivar : ivar -> ivar -> int
 
   val hash_ivar : ivar -> int
@@ -27,17 +27,17 @@ module type S_types = sig
 
   val sexp_of_bvar : bvar -> Sexplib.Sexp.t
 
-  val compare_rvar : rvar -> rvar -> int
+(*  val compare_rvar : rvar -> rvar -> int
 
   val hash_rvar : rvar -> int
 
   val sexp_of_rvar : rvar -> Sexplib.Sexp.t
-
+*)
   val ivar_of_bvar : bvar -> ivar
 
   val bvar_of_ivar : ivar -> bvar
 
-  val rvar_of_bvar : bvar -> rvar
+(*  val rvar_of_bvar : bvar -> rvar *)
 
 end
 
@@ -64,16 +64,16 @@ module type S_access = sig
 
   val new_f : ctx -> string -> int -> f
 
-  (** define an integer variable with optional lower and upper
+  (** define an integer/real variable with optional lower and upper
       bounds *)
   val new_ivar : ctx -> mip_type -> ivar
 
   (** define a boolean variable *)
   val new_bvar : ctx -> bvar
 
-  (** define a real variable with optional lower and upper bounds*)
+(*  (** define a real variable with optional lower and upper bounds*)
   val new_rvar : ctx -> mip_type -> rvar
-
+*)
   (** [negate_bvar ctx v] = not v *)
   val negate_bvar : ctx -> bvar -> bvar
 
@@ -91,7 +91,6 @@ module type S_access = sig
 
   (** [add_real_indicator ctx v r] asserts v => (i <= rhs) *)
   val add_real_indicator :
-   (* ctx -> bvar signed -> rvar rsum -> Float.t -> unit*)
     ctx -> bvar signed -> ivar rsum -> Float.t -> unit
 
   (** [add_clause ctx l] asserts l (viewed as a clause) *)
@@ -155,7 +154,7 @@ module type S_dp_access = sig
 
   val bderef_sol : ctx -> sol -> bvar -> bool
 
-  val rderef_sol : ctx -> sol -> rvar -> float
+  (*val rderef_sol : ctx -> sol -> rvar -> float*)
 
 end
 
@@ -175,7 +174,7 @@ module type S_dp = sig
 
   type ivar_plug
   type bvar_plug
-  type rvar_plug
+(*  type rvar_plug *)
 
   include Ctx_intf.S_unit_creatable
 
@@ -184,7 +183,7 @@ module type S_dp = sig
     (S : S_dp_access
      with type ivar = ivar_plug
      and type bvar = bvar_plug
-     and type rvar = rvar_plug) :
+ (*    and type rvar = rvar_plug*)  ) :
 
   sig
 
@@ -211,7 +210,7 @@ module type S_dp_finegrained = sig
 
   type ivar_plug
   type bvar_plug
-  type rvar_plug
+(*  type rvar_plug *)
 
   include Ctx_intf.S_unit_creatable
 
@@ -220,7 +219,7 @@ module type S_dp_finegrained = sig
     (S : S_dp_access
      with type ivar = ivar_plug
      and type bvar = bvar_plug
-     and type rvar = rvar_plug) :
+(*     and type rvar = rvar_plug  *)) :
 
   sig
     
@@ -259,7 +258,7 @@ module type S_with_dp = sig
     (D : S_dp
      with type ivar_plug := ivar
      and type bvar_plug := bvar
-     and type rvar_plug := rvar) :
+ (*    and type rvar_plug := rvar   *)) :
 
   sig
 
@@ -268,7 +267,7 @@ module type S_with_dp = sig
        with type ctx = ctx
        and type ivar = ivar
        and type bvar = bvar
-       and type rvar = rvar)
+  (*     and type rvar = rvar  *))
       
     include
       (S_types_uf with type f = f)
@@ -278,7 +277,7 @@ module type S_with_dp = sig
        with type ctx := ctx
        and type ivar := ivar
        and type bvar := bvar
-       and type rvar := rvar
+ (*      and type rvar := rvar   *)
        and type f := f)
 
     val register_ivar :
@@ -287,9 +286,9 @@ module type S_with_dp = sig
     val register_bvar :
       ctx -> bvar -> unit
 
-    val register_rvar :
+(*    val register_rvar :
       ctx -> rvar -> unit
-
+*)
     val make_ctx : D.ctx -> ctx
     val register : ctx -> ivar -> ivar -> unit
 

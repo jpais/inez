@@ -50,10 +50,10 @@ module Ops :
    with type ('i, 's) t := ('i, 's) M.t
    and type 'i atom_plug := 'i A.t
    and type 'a formula_plug := 'a Formula.t
-   and type 'i atomf_plug := 'i A.t
-   and type 'a formulaf_plug := 'a Formula.t
+   and type 'i real_atom_plug := 'i A.t
+   and type 'a real_formula_plug := 'a Formula.t
    and type int_plug := Core.Std.Int63.t
-   and type float_plug := Core.Std.Float.t )
+   and type real_plug := Core.Std.Float.t )
   
 
 
