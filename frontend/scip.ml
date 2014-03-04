@@ -15,6 +15,7 @@ type scip_ctx = {
   mutable r_constraints_n: int;
   mutable r_has_objective: bool;
   mutable r_sol: sol option;
+  mutable r_cuts_n: int;
 }
 
 let dummy_f = ""
@@ -35,8 +36,6 @@ let ivar_of_bvar x = x
 
 (* TODO : check bounds *)
 let bvar_of_ivar x = x
-
-let rvar_of_bvar x = x
 
 type named_constraint = cons
 
@@ -122,7 +121,7 @@ let run_config_list c =
 
 let make_ctx () =
   let r_ctx = assert_ok1 _here_ (sCIPcreate ()) in
-  let r_cch = Some (new_cc_handler r_ctx None) in
+  let r_cch = Some (new_cc_handler r_ctx None None) in
   cc_handler_include (Option.value_exn r_cch ~here:_here_);
   assert_ok _here_ (sCIPincludeDefaultPlugins r_ctx);
   assert_ok _here_ (sCIPcreateProbBasic r_ctx "prob");
@@ -130,8 +129,10 @@ let make_ctx () =
   let r_var_d = Dequeue.create () ~initial_length:1023
   and r_constraints_n = 0
   and r_has_objective = false
-  and r_sol = None in
-  {r_ctx; r_cch; r_var_d; r_constraints_n; r_has_objective; r_sol}
+  and r_sol = None 
+  and r_cuts_n = 0 in
+  {r_ctx; r_cch; r_var_d; r_constraints_n; r_has_objective;
+   r_sol; r_cuts_n}
 
 let new_f _ id _ = id
 
@@ -306,6 +307,11 @@ let result_of_status = function
   | _ ->
     R_Unknown
 
+let sresult_of_response = function
+  | N_Ok -> SCIP_DIDNOTFIND
+  | N_Unsat -> SCIP_CUTOFF
+  | N_Tightened -> SCIP_REDUCEDDOM
+
 let write_ctx {r_ctx} filename =
   assert_ok _here_ (sCIPwriteOrigProblem r_ctx filename "lp" false)
 
@@ -355,11 +361,37 @@ let variables_number {r_var_d} = Dequeue.length r_var_d
 
 let constraints_number {r_constraints_n} = r_constraints_n
 
+let make_cut_id ({r_cuts_n} as r) =
+  let id = Printf.sprintf "c%d" r_cuts_n in
+  r.r_cuts_n <- r_cuts_n + 1;
+  id
+
+let add_cut_local ({r_ctx} as r) (l, o) =
+  let row =
+    assert_ok1 _here_
+      (sCIPcreateEmptyRowCons r_ctx
+         (sCIPfindConshdlr r_ctx "cc")
+         (make_cut_id r)
+         (-. (sCIPinfinity r_ctx)) (Int63.to_float o)
+         true false false) in
+  assert_ok _here_ (sCIPcacheRowExtensions r_ctx row);
+  assert (not (List.is_empty l));
+  List.iter l
+    ~f:(fun (c, v) ->
+      assert_ok _here_
+        (sCIPaddVarToRow r_ctx row v (Int63.to_float c)));
+  assert_ok _here_ (sCIPflushRowExtensions r_ctx row) ;
+  assert_ok _here_ (sCIPaddCut r_ctx (scip_null_sol ()) row true)
+
+(* FIXME : do we really need the Option? *)
+
+let name_diff {r_cch} v1 v2 =
+  Option.(r_cch >>| fun r_cch -> cc_handler_add_dvar r_cch v1 v2)
+
 module Types = struct
   type ctx = scip_ctx
   type ivar = var
   type bvar = var
-  type rvar = var
   let compare_ivar = compare_var
   let hash_ivar = hash_var
   let sexp_of_ivar = sexp_of_var
@@ -368,10 +400,6 @@ module Types = struct
   let sexp_of_bvar = sexp_of_var
   let ivar_of_bvar = ivar_of_bvar
   let bvar_of_ivar = bvar_of_ivar
-  let rvar_of_bvar = rvar_of_bvar
-  let sexp_of_rvar = sexp_of_var
-  let hash_rvar = hash_var
-  let compare_rvar = compare_var
 end
 
 module Types_uf = struct
@@ -402,9 +430,10 @@ module Access = struct
   let bderef = bderef
   let rderef = rderef 
   let write_ctx = write_ctx
+  let name_diff = name_diff
 end
 
-module Dp_access = struct
+module Dp_access_bounds = struct
 
   include Types
 
@@ -453,6 +482,16 @@ module Dp_access = struct
     else
       `Ok
 
+  let ideref_sol = ideref_sol
+
+  let bderef_sol = bderef_sol
+
+end
+
+module Dp_access = struct
+
+  include Dp_access_bounds
+
   let ibranch = branch
 
   let ibranch_nary {r_ctx} v ~middle ~n ~width =
@@ -468,14 +507,23 @@ module Dp_access = struct
 
   let bbranch r v = branch r v 0.5
 
-  let name_diff r v1 v2 =
-    let v = new_ivar r (T_Int (None, None)) in
-    Int63.(add_eq r [one, v1; minus_one, v2; minus_one, v] zero);
-    Some v
+end
 
-  let ideref_sol = ideref_sol
+module Dvars =
+  Dvars.Make (struct
+    include Dp_access_bounds
+    let name_diff = name_diff
+  end)
 
-  let bderef_sol = bderef_sol
+module Cut_gen_access = struct
+
+  include Dp_access_bounds
+
+  module Dvars = Dvars
+
+  (* type dvar = Dvars.t *)
+
+  let add_cut_local = add_cut_local
 
   let rderef_sol = rderef_sol
 
@@ -497,8 +545,7 @@ module Scip_with_dp = struct
 
     (D : Imt_intf.S_dp
      with type ivar_plug := ivar
-     and  type bvar_plug := bvar
-    (* and  type rvar_plug := rvar  *)) =
+     and type bvar_plug := bvar) =
 
   struct
 
@@ -508,11 +555,6 @@ module Scip_with_dp = struct
     include Types_uf
     include Access
 
-    let result_of_response = function
-      | N_Ok -> SCIP_DIDNOTFIND
-      | N_Unsat -> SCIP_CUTOFF
-      | N_Tightened -> SCIP_REDUCEDDOM
-
     let make_dp d_ctx ctx =
       make_dP (object
         method push_level =
@@ -520,7 +562,7 @@ module Scip_with_dp = struct
         method backtrack =
           D'.backtrack d_ctx ctx
         method propagate =
-          result_of_response (D'.propagate d_ctx ctx)
+          sresult_of_response (D'.propagate d_ctx ctx)
         method check =
           D'.check d_ctx ctx
         method branch =
@@ -537,17 +579,19 @@ module Scip_with_dp = struct
       and r_var_d = Dequeue.create ()
       and r_constraints_n = 0
       and r_has_objective = false
-      and r_sol = None in
+      and r_sol = None
+      and r_cuts_n = 0 in
       let rval = {
         r_ctx;
         r_cch;
         r_var_d;
         r_constraints_n;
         r_has_objective;
-        r_sol
+        r_sol;
+        r_cuts_n
       } in
       let o = Some (make_dp d rval) in
-      let r_cch = Some (new_cc_handler r_ctx o) in
+      let r_cch = Some (new_cc_handler r_ctx o None) in
       rval.r_cch <- r_cch;
       cc_handler_include (Option.value_exn rval.r_cch ~here:_here_);
       assert_ok _here_ (sCIPincludeDefaultPlugins r_ctx);
@@ -555,7 +599,43 @@ module Scip_with_dp = struct
       run_config_list r_ctx;
       rval
     
-    let register _ _ _ = ()
+    let register_var {r_cch} v =
+      let r_cch = Option.value_exn ~here:_here_ r_cch in
+      cc_handler_catch_var_events r_cch v
+
+    let register_ivar = register_var
+
+    let register_bvar = register_var
+
+  end
+
+end
+
+module Scip_with_cut_gen = struct
+
+  include Types
+  include Types_uf
+    
+  type sol' = sol
+    
+  type sol = sol'
+
+  module Dvars = Dvars
+
+  module F
+
+    (D : Imt_intf.S_cut_gen
+     with type ivar_plug := ivar
+     and type bvar_plug := bvar
+     and type dvar_plug := Dvars.t) =
+
+  struct
+
+    module D' = D.F(Cut_gen_access)
+
+    include Types
+    include Types_uf
+    include Access
 
     let register_var {r_cch} v =
       let r_cch = Option.value_exn ~here:_here_ r_cch in
@@ -565,8 +645,54 @@ module Scip_with_dp = struct
 
     let register_bvar = register_var
 
-(*    let register_rvar = register_var *)
+    let make_cut_gen d_ctx ctx =
+      make_cut_Gen (object
+        method push_level =
+          D'.push_level d_ctx ctx
+        method backtrack =
+          D'.backtrack d_ctx ctx
+        method generate =
+          match D'.generate d_ctx ctx (scip_null_sol ()) with
+          | `Unknown ->
+            SCIP_DIDNOTFIND
+          | `Sat ->
+            SCIP_FEASIBLE
+          | `Unsat_Cut_Gen ->
+            SCIP_SEPARATED
+          | `Cutoff ->
+            SCIP_CUTOFF
+        method check =
+          D'.check d_ctx ctx
+      end)
 
+    let make_ctx c =
+      let r_ctx = assert_ok1 _here_ (sCIPcreate ())
+      and r_cch = None
+      and r_var_d = Dequeue.create ()
+      and r_constraints_n = 0
+      and r_has_objective = false
+      and r_sol = None
+      and r_cuts_n = 0 in
+      let rval = {
+        r_ctx;
+        r_cch;
+        r_var_d;
+        r_constraints_n;
+        r_has_objective;
+        r_sol;
+        r_cuts_n
+      } in
+      let o = Some (make_cut_gen c rval) in
+      let r_cch = Some (new_cc_handler r_ctx None o) in
+      rval.r_cch <- r_cch;
+      cc_handler_include (Option.value_exn rval.r_cch ~here:_here_);
+      assert_ok _here_ (sCIPincludeDefaultPlugins r_ctx);
+      assert_ok _here_ (sCIPcreateProbBasic r_ctx "prob");
+      run_config_list r_ctx;
+      rval
+
+    let create_dvar = Dvars.create_dvar
+    
   end
 
 end

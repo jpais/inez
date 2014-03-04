@@ -1,7 +1,7 @@
 module Id' = Id.Make (struct end)
-module S = Solver.Make(Scip.Scip_basic)(Id')
+module S = Mono_solver.Make(Scip.Scip_with_cut_gen)(Id')
 
-let ctx = S.make_ctx (Scip.Scip_basic.make_ctx ())
+let ctx = S.make_ctx ()
 
 type c = Id'.c
 
@@ -11,9 +11,6 @@ let constrain =
 let solve () =
   S.solve ctx
 
-let solve_real () =
-  S.solve_real ctx;;
-
 let fresh_int_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Int)
 
@@ -21,11 +18,6 @@ let fresh_bool_var () =
   Formula.F_Atom
     (Logic.A.A_Bool
        (Logic.M.M_Var (Id'.gen_id Type.Y_Bool)))
-
-let fresh_real_var () =
-  Logic.M.M_Var (Id'.gen_id Type.Y_Real);;
-
-let roi x = Logic.M.roi x ;;
 
 let ideref = function
   | Logic.M.M_Var v ->
@@ -38,12 +30,6 @@ let bderef = function
     S.deref_bool ctx v
   | _ ->
     None
-
-let rderef = function
-  | Logic.M.M_Var v ->
-    S.deref_real ctx v
-  | _ -> 
-    None 
 
 let toi x =
   Logic.M.M_Int (Core.Std.Int63.of_int x)
@@ -71,14 +57,17 @@ let minimize o =
   | `Duplicate ->
     raise (Invalid_argument "problem has objective already")
 
-
-let minimize_real o = 
-  match S.add_real_objective ctx o with
-    | `Ok -> ()
-    | `Duplicate -> raise (Invalid_argument "The problem already has an objective")
-
 let solve_print_result () =
   print_endline (string_of_result (solve ()))
+
+let mono f =
+  let open Logic in
+  match f (M.M_Int Core.Std.Int63.zero) with
+  | M.M_App (M.M_Var id, M.M_Int z)
+      when Core.Std.Int63.(compare z zero) = 0 ->
+    S.mono_increasing ctx id
+  | _ ->
+    ()
 
 let argv =
   if !Sys.interactive then
@@ -86,4 +75,3 @@ let argv =
   else
     let open Core.Std.Array in
     slice Sys.argv 1 (length Sys.argv)
-

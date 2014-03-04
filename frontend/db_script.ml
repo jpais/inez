@@ -63,3 +63,13 @@ let string_of_result =
     "unsat"
   | R_Unknown ->
     "unknown"
+
+let solve_print_result () =
+  print_endline (string_of_result (solve ()))
+
+let argv =
+  if !Sys.interactive then
+    Sys.argv
+  else
+    let open Core.Std.Array in
+    slice Sys.argv 1 (length Sys.argv)

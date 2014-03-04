@@ -134,9 +134,10 @@ struct
     zeror -. a
 
   let sum l ~f =
-    List.fold_left l ~init:zero
-      ~f:(fun acc x -> acc + f x)
-
+    let f acc x = acc + f x
+    and init = zero in
+    List.fold_left l ~init ~f
+    
   let sumf l ~f =
     List.fold_left l ~init:zeror
       ~f:(fun acc x -> acc +. f x)

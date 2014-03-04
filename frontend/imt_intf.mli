@@ -1,25 +1,23 @@
 open Core.Std
 open Terminology
 
-module type S_types = sig
-
-  (** context *)
-  type ctx
+module type S_ivar = sig
 
   (** integer/real variable *)
   type ivar
 
-  (** boolean variable *)
-  type bvar
-
-(*  (** real variable*)
-  type rvar
-*)
   val compare_ivar : ivar -> ivar -> int
 
   val hash_ivar : ivar -> int
 
   val sexp_of_ivar : ivar -> Sexplib.Sexp.t
+
+end
+
+module type S_bvar = sig
+  
+  (** boolean variable *)
+  type bvar
 
   val compare_bvar : bvar -> bvar -> int
 
@@ -27,21 +25,24 @@ module type S_types = sig
 
   val sexp_of_bvar : bvar -> Sexplib.Sexp.t
 
-(*  val compare_rvar : rvar -> rvar -> int
+end
 
-  val hash_rvar : rvar -> int
+module type S_essentials = sig
 
-  val sexp_of_rvar : rvar -> Sexplib.Sexp.t
-*)
+  (** context *)
+  type ctx
+
+  include S_ivar
+
+  include S_bvar
+
   val ivar_of_bvar : bvar -> ivar
 
   val bvar_of_ivar : ivar -> bvar
 
-(*  val rvar_of_bvar : bvar -> rvar *)
-
 end
 
-module type S_types_uf = sig
+module type S_uf = sig
 
   type f
 
@@ -58,9 +59,9 @@ end
 
 module type S_access = sig
 
-  include S_types
+  include S_essentials
 
-  include S_types_uf
+  include S_uf
 
   val new_f : ctx -> string -> int -> f
 
@@ -71,9 +72,6 @@ module type S_access = sig
   (** define a boolean variable *)
   val new_bvar : ctx -> bvar
 
-(*  (** define a real variable with optional lower and upper bounds*)
-  val new_rvar : ctx -> mip_type -> rvar
-*)
   (** [negate_bvar ctx v] = not v *)
   val negate_bvar : ctx -> bvar -> bvar
 
@@ -117,25 +115,43 @@ module type S_access = sig
 
 end
 
-module type S_dp_access = sig
+module type S_int_bounds = sig
 
-  include S_types
+  type ctx
+
+  type sol
+
+  type t
+
+  val get_lb_local : ctx -> t -> Int63.t option
+    
+  val get_ub_local : ctx -> t -> Int63.t option
+
+  val set_lb_local :
+    ctx -> t -> Int63.t -> [`Infeasible | `Ok | `Tightened]
+
+  val set_ub_local :
+    ctx -> t -> Int63.t -> [`Infeasible | `Ok | `Tightened]
+
+  val ideref_sol : ctx -> sol -> t -> Int63.t
+
+end
+
+module type S_dp_access_bounds = sig
+
+  include S_essentials
+
+  include S_int_bounds with type ctx := ctx and type t := ivar
 
   val bderef_local : ctx -> bvar -> bool option
 
-  val get_lb_local : ctx -> ivar -> Int63.t option
-    
-  val get_ub_local : ctx -> ivar -> Int63.t option
+  val bderef_sol : ctx -> sol -> bvar -> bool
 
-  val set_lb_local :
-    ctx -> ivar -> Int63.t -> [`Infeasible | `Ok | `Tightened]
-    
-  val set_ub_local :
-    ctx -> ivar -> Int63.t -> [`Infeasible | `Ok | `Tightened]
+end
 
-  (* maybe redundant? *)
-  val name_diff :
-    ctx -> ivar -> ivar -> ivar option
+module type S_dp_access = sig
+
+  include S_dp_access_bounds
 
   val ibranch :
     ctx -> ivar -> float -> [`Ok | `Fail]
@@ -148,13 +164,37 @@ module type S_dp_access = sig
   val bbranch :
     ctx -> bvar -> [`Ok | `Fail]
 
-  type sol
+end
 
-  val ideref_sol : ctx -> sol -> ivar -> Int63.t
+module type Dvars_access = sig
 
-  val bderef_sol : ctx -> sol -> bvar -> bool
+  type ctx_plug
 
-  (*val rderef_sol : ctx -> sol -> rvar -> float*)
+  type sol_plug
+
+  include (S_int_bounds
+           with type ctx := ctx_plug
+           and type sol := sol_plug)
+
+  val sexp_of_t : t -> Sexplib.Sexp.t
+
+  val compare : t -> t -> int
+
+  val hashable : t Hashtbl.Hashable.t
+
+end
+
+module type S_cut_gen_access = sig
+
+  include S_dp_access_bounds
+
+  module Dvars :
+    (Dvars_access
+     with type ctx_plug := ctx
+     and type sol_plug := sol)
+
+  val add_cut_local :
+    ctx -> ivar Terminology.iexpr -> unit
 
 end
 
@@ -174,16 +214,14 @@ module type S_dp = sig
 
   type ivar_plug
   type bvar_plug
-(*  type rvar_plug *)
 
   include Ctx_intf.S_unit_creatable
 
   module F
 
     (S : S_dp_access
-     with type ivar = ivar_plug
-     and type bvar = bvar_plug
- (*    and type rvar = rvar_plug*)  ) :
+     with type ivar := ivar_plug
+     and type bvar := bvar_plug) :
 
   sig
 
@@ -206,78 +244,33 @@ module type S_dp = sig
 
 end
 
-module type S_dp_finegrained = sig
-
-  type ivar_plug
-  type bvar_plug
-(*  type rvar_plug *)
-
-  include Ctx_intf.S_unit_creatable
-
-  module F
-
-    (S : S_dp_access
-     with type ivar = ivar_plug
-     and type bvar = bvar_plug
-(*     and type rvar = rvar_plug  *)) :
-
-  sig
-    
-    val push_level :
-      ctx -> S.ctx -> unit
-    
-    val backtrack :
-      ctx -> S.ctx -> unit
-    
-    val backtrack_root :
-      ctx -> S.ctx -> unit
-
-    val check :
-      ctx -> S.ctx -> S.sol -> bool
-
-    val receive_lb :
-      ctx -> S.ctx -> S.ivar -> Int63.t -> response
-
-    val receive_ub :
-      ctx -> S.ctx -> S.ivar -> Int63.t -> response
-
-    val receive_diff :
-      ctx -> S.ctx -> S.ivar -> S.ivar -> Int63.t -> response
-
-  end
-
-end
-
 module type S_with_dp = sig
     
-  include S_types
-  include S_types_uf
+  include S_essentials
+  include S_uf
 
   module F
 
     (D : S_dp
      with type ivar_plug := ivar
-     and type bvar_plug := bvar
- (*    and type rvar_plug := rvar   *)) :
+     and type bvar_plug := bvar) :
 
   sig
 
     include
-      (S_types
+      (S_essentials
        with type ctx = ctx
        and type ivar = ivar
-       and type bvar = bvar
-  (*     and type rvar = rvar  *))
+       and type bvar = bvar)
       
     include
-      (S_types_uf with type f = f)
+      (S_uf with type f = f)
       
     include
       (S_access
        with type ctx := ctx
        and type ivar := ivar
        and type bvar := bvar
- (*      and type rvar := rvar   *)
        and type f := f)
 
     val register_ivar :
@@ -286,12 +279,99 @@ module type S_with_dp = sig
     val register_bvar :
       ctx -> bvar -> unit
 
-(*    val register_rvar :
-      ctx -> rvar -> unit
-*)
     val make_ctx : D.ctx -> ctx
-    val register : ctx -> ivar -> ivar -> unit
 
   end
 
 end
+
+module type S_cut_gen = sig
+
+  type ivar_plug
+  type bvar_plug
+  type dvar_plug
+
+  include Ctx_intf.S_unit_creatable
+
+  module F
+
+    (S : S_cut_gen_access
+     with type ivar := ivar_plug
+     and type bvar := bvar_plug
+     and type Dvars.t = dvar_plug) :
+
+  sig
+
+    val push_level :
+      ctx -> S.ctx -> unit
+
+    val backtrack :
+      ctx -> S.ctx -> unit
+
+    val check :
+      ctx -> S.ctx -> S.sol -> bool
+
+    val generate :
+      ctx -> S.ctx -> S.sol ->
+      [ `Unknown | `Sat | `Unsat_Cut_Gen | `Cutoff ]
+
+  end
+
+end
+
+module type S_with_cut_gen = sig
+    
+  include S_essentials
+  include S_uf
+
+  type sol
+
+  module Dvars : sig
+
+    include
+      (Dvars_access
+       with type ctx_plug := ctx
+       and type sol_plug := sol)
+
+    val create_dvar :
+      ctx -> ivar option offset -> ivar option offset -> t
+
+  end
+
+  module F
+
+    (D : S_cut_gen
+     with type ivar_plug := ivar
+     and type bvar_plug := bvar
+     and type dvar_plug := Dvars.t) :
+
+  sig
+
+    include
+      (S_essentials
+       with type ctx = ctx
+       and type ivar = ivar
+       and type bvar = bvar)
+      
+    include
+      (S_uf with type f = f)
+      
+    include
+      (S_access
+       with type ctx := ctx
+       and type ivar := ivar
+       and type bvar := bvar
+       and type f := f)
+
+    val make_ctx : D.ctx -> ctx
+
+    val create_dvar :
+      ctx ->
+      ivar option offset ->
+      ivar option offset ->
+      Dvars.t
+
+  end
+
+end
+
