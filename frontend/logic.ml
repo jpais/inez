@@ -20,15 +20,15 @@ struct
   | M_ROI : ('i, int) t -> ('i, float) t
   | M_Sum   : ('i, int) t * ('i, int) t ->
     ('i, int) t
-  | M_FSum  :  ('i, float) t * ('i,float) t ->
+  | M_RSum  :  ('i, float) t * ('i,float) t ->
     ('i, float) t
   | M_Prod  :  Core.Std.Int63.t * ('i, int) t ->
     ('i, int) t
-  | M_FProd :  Core.Std.Float.t * ('i, float) t -> 
+  | M_RProd :  Core.Std.Float.t * ('i, float) t -> 
     ('i, float) t
   | M_Ite   :  'i atom Formula.t * ('i, int) t * ('i, int) t ->
     ('i, int) t
-  | M_FIte  :  'i atom Formula.t * ('i, float) t * ('i, float) t ->
+  | M_RIte  :  'i atom Formula.t * ('i, float) t * ('i, float) t ->
     ('i, float) t
   | M_Var   :  ('i, 's) Id.t ->
     ('i, 's) t
@@ -60,15 +60,15 @@ struct
 	Type.Y_Real
       | M_Sum (_, _) ->
         Type.Y_Int
-      | M_FSum (_,_) ->
+      | M_RSum (_,_) ->
         Type.Y_Real
       | M_Prod (_, _) ->
         Type.Y_Int
-      | M_FProd (_,_) ->
+      | M_RProd (_,_) ->
 	Type.Y_Real
       | M_Ite (_, _, _) ->
         Type.Y_Int
-      | M_FIte (_,_,_) ->
+      | M_RIte (_,_,_) ->
 	Type.Y_Real
       | M_Var id ->
         a_f id
@@ -93,7 +93,7 @@ struct
     | M_Real x, M_Real y              -> M_Real (x +. y)
     | M_Real x, _ when x = Float.zero -> b
     | _, M_Real x when x = Float.zero -> a
-    | _                               -> M_FSum (a, b)
+    | _                               -> M_RSum (a, b)
 
 
   let ( * ) c a =
@@ -106,7 +106,7 @@ struct
     if c = Float.zero then
       zeror
     else 
-      M_FProd (c, a)
+      M_RProd (c, a)
   
   let ( - ) a b =
     match a, b with
@@ -138,9 +138,10 @@ struct
     and init = zero in
     List.fold_left l ~init ~f
     
-  let sumf l ~f =
-    List.fold_left l ~init:zeror
-      ~f:(fun acc x -> acc +. f x)
+  let sumr l ~f =
+    let f acc x = acc +. f x
+    and init = zeror in
+    List.fold_left l ~init ~f
 
   let rec fold :
   type s . ('i, s) t ->
@@ -159,17 +160,17 @@ struct
       | M_ROI x -> fold x ~init ~f
       | M_Sum (a, b) ->
         fold b ~init:(fold a ~init ~f) ~f
-      | M_FSum (a, b) ->
+      | M_RSum (a, b) ->
 	fold b ~init:(fold a ~init ~f) ~f
       | M_Prod (_, a) ->
         fold a ~init ~f
-      | M_FProd (_, a) ->
+      | M_RProd (_, a) ->
         fold a ~init ~f
       | M_Ite (q, a, b) ->
         let init = f init q in
         let init = fold a ~init ~f in
         fold b ~init ~f
-      | M_FIte (q, a, b) ->
+      | M_RIte (q, a, b) ->
 	let init = f init q in
 	let init = fold a ~init ~f in
 	fold b ~init ~f
@@ -213,18 +214,18 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
       | M1.M_ROI x -> M_ROI (map x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map a ~f ~fv + map b ~f ~fv
-      | M1.M_FSum (a, b) ->
+      | M1.M_RSum (a, b) ->
 	map a ~f ~fv +. map b ~f ~fv
       | M1.M_Prod (c, a) ->
         c * map a ~f ~fv
-      | M1.M_FProd (c, a) ->
+      | M1.M_RProd (c, a) ->
 	c *. map a ~f ~fv
       | M1.M_Ite (q, a, b) ->
         M_Ite (Formula.map q ~polarity ~f,
                map a ~f ~fv,
                map b ~f ~fv)
-      | M1.M_FIte (q, a, b) ->
-	M_FIte (Formula.map q ~polarity ~f,
+      | M1.M_RIte (q, a, b) ->
+	M_RIte (Formula.map q ~polarity ~f,
 	       map a ~f ~fv,
 	       map b ~f ~fv)
       | M1.M_Var i ->
@@ -250,15 +251,15 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
       | M1.M_ROI x -> M_ROI (map_non_atomic x ~f ~fv)
       | M1.M_Sum (a, b) ->
         map_non_atomic a ~f ~fv + map_non_atomic b ~f ~fv
-      | M1.M_FSum (a, b) -> map_non_atomic a ~f ~fv +. map_non_atomic b ~f ~fv
+      | M1.M_RSum (a, b) -> map_non_atomic a ~f ~fv +. map_non_atomic b ~f ~fv
       | M1.M_Prod (c, a) ->
         c * map_non_atomic a ~f ~fv
-      | M1.M_FProd (c, a) -> c *. map_non_atomic a ~f ~fv
+      | M1.M_RProd (c, a) -> c *. map_non_atomic a ~f ~fv
       | M1.M_Ite (q, a, b) ->
         M_Ite (Formula.map_non_atomic q ~polarity ~f,
                map_non_atomic a ~f ~fv,
                map_non_atomic b ~f ~fv)
-      | M1.M_FIte (q, a, b) -> M_FIte (Formula.map_non_atomic q ~polarity ~f,
+      | M1.M_RIte (q, a, b) -> M_RIte (Formula.map_non_atomic q ~polarity ~f,
 				       map_non_atomic a ~f ~fv,
 				       map_non_atomic b ~f ~fv)
       | M1.M_Var i ->
@@ -316,9 +317,9 @@ module Ops = struct
 
   let (>) a b = b < a
 
-  let iiter c a b = M.M_FIte (c, a, b)
+  let rite c a b = M.M_RIte (c, a, b)
 
-  let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. M_Real 1.0 -. b)))
+  let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. (M_Real Float.(1.0)) -. b)))
 
   let (<=.) a b = Formula.F_Atom (A_LeF M.(a -. b))
 

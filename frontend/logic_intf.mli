@@ -12,15 +12,15 @@ module type Term = sig
   | M_ROI   : ('i, int) t -> ('i, float) t
   | M_Sum   :  ('i, int) t * ('i, int) t ->
     ('i, int) t
-  | M_FSum  :  ('i, float) t * ('i,float) t ->
+  | M_RSum  :  ('i, float) t * ('i,float) t ->
     ('i, float) t
   | M_Prod  :  Core.Std.Int63.t * ('i, int) t ->
     ('i, int) t
-  | M_FProd :  float * ('i, float) t -> 
+  | M_RProd :  float * ('i, float) t -> 
     ('i, float) t
   | M_Ite   :  'i atom Formula.t * ('i, int) t * ('i, int) t ->
     ('i, int) t
-  | M_FIte  :  'i atom Formula.t * ('i, float) t * ('i, float) t ->
+  | M_RIte  :  'i atom Formula.t * ('i, float) t * ('i, float) t ->
     ('i, float) t
   | M_Var   :  ('i, 's) Id.t ->
     ('i, 's) t

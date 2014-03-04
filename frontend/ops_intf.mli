@@ -55,7 +55,7 @@ module type Real = sig
 
     (* pseudo-quantifiers *)
 
-    val sumf : 'a list -> f:('a -> ('c, float) t) -> ('c, float) t
+    val sumr : 'a list -> f:('a -> ('c, float) t) -> ('c, float) t
 
 end
 
@@ -98,7 +98,7 @@ module type MixedReal = sig
 
     type _ real_formula_plug
 
-    val iiter : 'i real_atom_plug real_formula_plug ->
+    val rite : 'i real_atom_plug real_formula_plug ->
        ('i, float) t -> ('i, float) t -> ('i, float) t
 
     val (<.)  : ('i, float) t -> ('i, float) t -> 'i real_atom_plug real_formula_plug

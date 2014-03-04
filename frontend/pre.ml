@@ -66,7 +66,6 @@ module Make (I : Id.Accessors) = struct
   and term =
   | G_Base   of  term_base
   | G_Sum    of  sum  Terminology.offset 
-(*  | G_SumF   of  sumf Terminology.roffset   (*Remove*) *)
   | G_SumM   of  suml Terminology.roffset
   
 
@@ -94,15 +93,6 @@ module Make (I : Id.Accessors) = struct
     hash = Hashtbl.hash;
     sexp_of_t = sexp_of_sum
   }
-
-(* 
-  let hashable_rsum = {         (*Remove*)
-    Hashtbl.Hashable.
-    compare = compare_sumf;
-    hash = Hashtbl.hash;
-    sexp_of_t = sexp_of_sumf
-  }
-*)
 
   let hashable_suml = {
     Hashtbl.Hashable.
@@ -159,7 +149,6 @@ module Make (I : Id.Accessors) = struct
        very deep before we find shared parts. *)
 
     s_sum_h    :  (sum, sum) Hashtbl.t;
-   (* s_sumr_h   :  (sumf, sumf) Hashtbl.t;    (*Remove*) *)
     s_suml_h   :  (suml, suml) Hashtbl.t;   (* mixed int/float type*)
     s_args_h   :  (args, args) Hashtbl.t;
     s_iite_h   :  (iite, term_base) Hashtbl.t;
@@ -184,7 +173,6 @@ module Make (I : Id.Accessors) = struct
 
   let make_sharing_ctx () = {
     s_sum_h   = Hashtbl.create () ~size:2048 ~hashable:hashable_sum;
-(*    s_sumr_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_rsum;   (*Remove*) *)
     s_suml_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_suml;
     s_args_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_args;
     s_iite_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_iite;
@@ -229,7 +217,7 @@ module Make (I : Id.Accessors) = struct
 
 
 (*This won't be necessary anymore *)
-   
+
   let dedup_real_sum l =
     let sorter (n1,v1) (n2, v2) = if compare_term_base v1 v2 = 0
 				  then Float.to_int(Float.(n1 - n2))
@@ -304,11 +292,6 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     let l = dedup_sum l in
     Hashtbl.find_or_add s_sum_h l ~default:(fun () -> l), o
 
-(* 
-  let make_real_sum {r_sharing = {s_sumr_h}} l o =    (*Remove*)
-    let l = dedup_real_sum l in
-    Hashtbl.find_or_add s_sumr_h l ~default:(fun()->l), o
-*)
   let make_mixed_sum {r_sharing = {s_suml_h}} l ro = 
     let l = dedup_mixed_sum l in
     Hashtbl.find_or_add s_suml_h l ~default:(fun()->l), ro
@@ -385,19 +368,6 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
       Option.some_if
         (compare_term_base b1 b2 = 0)
         Float.zero
-   (* | G_SumF ([c, b1], o), G_Base b2 ->
-          Option.some_if
-                 (c = Float.(1.0) && compare_term_base b1 b2 = 0)
-                  o
-    | G_Base b2, G_SumF ([c, b1], o) ->
-     	   Option.some_if
-                 (c = Float.(1.0) && compare_term_base b1 b2 = 0)
-                 (Float.neg o)  
-    | G_SumF (s1, o1), G_SumF (s2, o2) ->
-      Option.some_if
-        (compare_sumf s1 s2 = 0)
-        Float.(o1 -. o2)
-   *)
     | G_SumM ([S_Int(c, b)], ro), G_Base b' ->
       Option.some_if
 	(c = Int63.one && compare_term_base b b' = 0)
@@ -426,16 +396,6 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | G_Base b ->
       [Int63.one, b], Int63.zero
     | G_SumM s -> raise (Failure "Undefined case for G_SumM") 
-(*    | G_SumF s -> raise (Failure "Remove this case") 
-
-  let sum_of_real_term = function   (*Remove*)
-    | G_SumF s ->
-      s
-    | G_Base b ->
-      [(Float.(1.0), b)], Float.zero
-    | _ -> [], Float.zero  (* Este caso hay que borrarlo, queda provisorio por G_Sum *)
-
- *)
 
   let sum_of_mixed_term = function
     | G_SumM s ->
@@ -444,7 +404,6 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
       [S_Real ((Float.(1.0), b))], Float.zero
     | G_Sum (l,o) -> 
       make_mixed (Float.(1.0)) l, (Int63.to_float o)
-(*    | _ -> [], Float.zero  This won't be necessary after deleting G_SumF *)
 
   let is_bounding = function
     | U_Not (U_Atom (s, O'_Eq)) :: d ->
@@ -462,9 +421,7 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
       None
     else
       let s = match l with
-      (*| U_Not (U_Atom (G_SumF (s, _), _)) :: _ ->
-          s *)
-	| U_Not (U_Atom (G_Sum (s, _), _)) :: _ ->
+ 	| U_Not (U_Atom (G_Sum (s, _), _)) :: _ ->
 	  (make_mixed (Float.(1.0)) s)
 	| U_Not (U_Atom (G_SumM (s, _), _)) :: _ ->
 	  s
@@ -476,10 +433,7 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
         let f acc = function
           | U_Not (U_Atom (G_Base _, _)) ->
             Float.zero :: acc
-      (*    | U_Not (U_Atom (G_SumF (_, d), _)) ->
-            d :: acc
-      *)
-	  | U_Not (U_Atom (G_Sum (_, d), _)) ->
+ 	  | U_Not (U_Atom (G_Sum (_, d), _)) ->
 	    (Int63.to_float d) :: acc
 	  | U_Not (U_Atom (G_SumM (_,d), _)) ->
 	    d :: acc
@@ -521,16 +475,7 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | M.M_Var v ->
       Id.Box_arrow.Box v, make_args r (List.rev acc)
 
- (*and inline_term r (d, x) k = function
-    | G_Base b ->
-      (k, b) :: d, x
-    | G_Sum (l, o) ->
-      List.rev_map_append l d ~f:(Tuple2.map1 ~f:(Int63.( * ) k)),
-      Int63.(x + o * k)
-    | _ -> [], Int63.zero
- *)
-
- and inline_term r (d, x) k = function
+  and inline_term r (d, x) k = function
     | G_Base b ->
       (k, b) :: d, x
     | G_Sum (l, o) -> 
@@ -593,14 +538,14 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | M.M_Var v ->
       G_Base (B_RVar v)
     | M.M_ROI x -> flatten_int_term r x 
-    | M.M_FIte (c, s, t) -> 
+    | M.M_RIte (c, s, t) -> 
       let c = flatten_formula r c
       and s = flatten_mixed_term r s
       and t = flatten_mixed_term r t in
       G_Base (make_iite r c s t)
     | M.M_App (f, t) ->
       G_Base (B_App (flatten_args r [flatten_term r t] f))
-    | M.M_Real _ | M.M_FSum (_, _) | M.M_FProd (_, _) as t->
+    | M.M_Real _ | M.M_RSum (_, _) | M.M_RProd (_, _) as t->
       let d, xr = [], Float.zero in
       let d, xr = flatten_mixed_term_sum r (d, xr) (1.0) t in
       G_SumM (make_mixed_sum r d xr)
@@ -615,12 +560,12 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | M.M_App (f, t) ->
       let a = flatten_args r [flatten_term r t] f in
        (S_Real (k, B_App a)) :: d, xr
-    | M.M_FSum(s, t) -> 
+    | M.M_RSum(s, t) -> 
       let d, xr = flatten_mixed_term_sum r (d, xr) k s in
       flatten_mixed_term_sum r (d, xr) k t
-    | M.M_FProd(k', t) ->
+    | M.M_RProd(k', t) ->
       flatten_mixed_term_sum r (d, xr) Float.(k *. k') t
-    | M.M_FIte(c,s,t) ->
+    | M.M_RIte(c,s,t) ->
       let c = flatten_formula r c
       and s = flatten_mixed_term r s 
       and t = flatten_mixed_term r t in
