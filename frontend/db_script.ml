@@ -31,14 +31,14 @@ let maximize m =
     | `Out_of_fragment ->
       raise (Invalid_argument "Maximize: term out of fragment")
 
-let minimize_real o =  raise (Failure "Undefined function minimize_real")
+let minimize_real o = () (* TODO: Add body to the function or merge with minimize *)
 
-let maximize_real o = raise (Failure "Undefined function maximize_real")
+let maximize_real o = () (* TODO: Add body to the function or merge with maximize *)
 
 let solve () =
   S.solve ctx
 
-let solve_real () = raise (Failure "Undefined function solve_real()")
+let solve_real () = Terminology.R_Unknown (* TODO: Add body to the function or merge with solve *)
 
 let fresh_int_var () =
   Db_logic.M.M_Var (Id'.gen_id Type.Y_Int)

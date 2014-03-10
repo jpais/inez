@@ -758,20 +758,17 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | Some _ ->
       `Duplicate
 
-  let add_real_objective2:
-  type s . ctx -> (I.c, s) M.t ->  [`Duplicate | `Ok] =
-    fun ({r_obj; r_pre_ctx} as r) o ->
+ (* let add_objective_test ({r_obj; r_pre_ctx} as r) o =
       match r_obj with
 	| None -> 
 	  let m = (match M.type_of_t o ~f:I.type_of_t' with
-	    | Type.Y_Int  -> P.flatten_int_term r_pre_ctx o
-	    | Type.Y_Real -> P.flatten_mixed_term r_pre_ctx o
-	    | _ -> raise (Unreachable.Exn _here_))
-	  in   
+	            | Type.Y_Int  -> P.flatten_int_term r_pre_ctx o
+     		    | Type.Y_Real -> P.flatten_mixed_term r_pre_ctx o
+		    | _ -> raise (Unreachable.Exn _here_)) in   
 	  r.r_obj <- Some m; `Ok
 	| Some _ ->
 	  `Duplicate
-
+ *)
 
   let deref_int {r_ctx; r_ivar_m} id =
     Option.(Hashtbl.find r_ivar_m id >>= S.ideref r_ctx)

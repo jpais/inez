@@ -19,7 +19,7 @@ module type S = sig
   val add_real_objective :
     ctx -> (c, float) Logic.M.t -> [> `Duplicate | `Ok]
 
-  val deref_int :
+   val deref_int :
     ctx -> (c, int) Id.t -> Core.Std.Int63.t option
 
   val deref_bool :

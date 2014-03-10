@@ -103,10 +103,10 @@ let rampup_constrain unit =
   List.iter intervals ~f:(fun i ->
     if (i.i_id) < ((List.length intervals) - 1) 
     then( if i.i_id = 0 
-          then constrain(~logicr( (output unit i) - (Logic.M.M_Int (Int63.of_int (init_pow.(unit.u_id)))) <=  
-                                  (Logic.M.M_Int (Int63.of_int (max_rampup.(unit.u_id))))));
-               constrain(~logicr( (output unit (next_interval i)) - (output unit i) <= 
-                                  (Logic.M.M_Int (Int63.of_int (max_rampup.(unit.u_id))))))
+          then constrain(~logicr((output unit i) - (toi (init_pow.(unit.u_id))) <=  
+                                  (toi (max_rampup.(unit.u_id)))));
+               constrain(~logicr((output unit (next_interval i)) - (output unit i) <= 
+                                  (toi (max_rampup.(unit.u_id))))))
     )
     else ()
   );;
@@ -115,10 +115,10 @@ let rampdown_constrain unit =
   List.iter intervals ~f:(fun i ->
     if (i.i_id) < ((List.length intervals) - 1) 
     then( if i.i_id = 0 
-          then constrain(~logicr( (Logic.M.M_Int (Int63.of_int (init_pow.(unit.u_id)))) - (output unit i) <=  
-                                  (Logic.M.M_Int (Int63.of_int (max_rampdown.(unit.u_id))))));
+          then constrain(~logicr( (toi (init_pow.(unit.u_id))) - (output unit i) <=  
+                                  (toi (max_rampdown.(unit.u_id)))));
                constrain(~logicr( (output unit i) - (output unit (next_interval i)) <= 
-                                  (Logic.M.M_Int (Int63.of_int (max_rampdown.(unit.u_id))))))
+                                  (toi (max_rampdown.(unit.u_id)))))
         )
     else ()
   );;
@@ -135,9 +135,9 @@ let status_constrain () =
   List.iter intervals ~f:(fun i ->
     if (i.i_id) = 0 
     then constrain( ~logicr((starting unit i) - (shutting unit i) = 
-                 (online unit i) - (Logic.M.M_Int(Int63.of_int((init_online.(unit.u_id)))))))
+                  (online unit i) - (toi (init_online.(unit.u_id)))))
     else constrain(~logicr((starting unit i) - (shutting unit i) = 
-                 (online unit i) - (online unit (prev_interval i))))
+                  (online unit i) - (online unit (prev_interval i))))
   ));;
 status_constrain();;
 
@@ -148,7 +148,7 @@ constrain(
   ~logicr(forall intervals ~f:(
     fun i -> sum units ~f:(
       fun u -> 
-	(output u i)) = Logic.M.M_Int (Int63.of_int(demand.(i.i_id)))
+	(output u i)) = toi (demand.(i.i_id))
 )));;
 
 
@@ -159,7 +159,7 @@ constrain(
   fun i -> sum units ~f:(
     fun u -> 
       (Int63.of_int (max_pow.(u.u_id))) * (online u i)) >= 
-      (Logic.M.M_Int(Int63.of_int(demand.(i.i_id))) + (Logic.M.M_Int(Int63.of_int(reserve.(i.i_id)))))
+      (toi (demand.(i.i_id))) + (toi (reserve.(i.i_id))))))
 )));;
 
 

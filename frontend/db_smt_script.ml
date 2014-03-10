@@ -22,8 +22,23 @@ let minimize m =
   | `Out_of_fragment ->
     raise (Invalid_argument "minimize: term out of fragment")
 
+let maximize m = 
+ match S.add_objective ctx (Db_logic.M.(~- m)) with
+    |`Ok -> 
+      ()
+    | `Duplicate ->
+      raise (Invalid_argument "The problem already has an objective.")
+    | `Out_of_fragment ->
+      raise (Invalid_argument "Maximize: term out of fragment")
+
+let minimize_real o = () (* TODO: Add body to the function or merge with minimize *)
+
+let maximize_real o = () (* TODO: Add body to the function or merge with maximize *)
+
 let solve () =
   S.solve ctx
+
+let solve_real () = Terminology.R_Unknown (* TODO: Add body to the function or merge with solve *)
 
 let fresh_int_var () =
   Db_logic.M.M_Var (Id'.gen_id Type.Y_Int)
@@ -32,6 +47,9 @@ let fresh_bool_var () =
   Formula.F_Atom
     (Db_logic.A.A_Bool
        (Db_logic.M.M_Var (Id'.gen_id Type.Y_Bool)))
+
+let fresh_real_var () =  
+  Db_logic.M.M_Var (Id'.gen_id Type.Y_Real)
 
 let ideref = function
   | Db_logic.M.M_Var v ->
@@ -42,6 +60,12 @@ let ideref = function
 let bderef = function
   | Formula.F_Atom (Db_logic.A.A_Bool (Db_logic.M.M_Var v)) ->
     S.deref_bool ctx v
+  | _ ->
+    None
+
+let rderef = function
+  | Db_logic.M.M_Var v ->
+    None
   | _ ->
     None
 
