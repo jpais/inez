@@ -157,7 +157,7 @@ let transform_real_logic_aux mid e =
       $uid:mid$.M.M_Prod (Core.Std.Int63.of_string $str:s$, $x$) >>
   | <:expr< $uid:mid$.M.M_Real (Core.Std.Float.of_string $str:s$) *. $x$ >> ->
     <:expr<
-      $uid:mid$.M.M_FProd (Core.Std.Float.of_string $str:s$, $x$) >>
+      $uid:mid$.M.M_RProd (Core.Std.Float.of_string $str:s$, $x$) >>
   | <:expr< $uid:mid$.M.M_Int $i1$ * $uid:mid'$.M.M_Int $i2$ >>
       when mid = mid' ->
     <:expr< $uid:mid$.M.M_Int (Core.Std.Int63.(i1 * i2)) >>

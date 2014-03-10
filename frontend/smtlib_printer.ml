@@ -34,12 +34,25 @@ module Make (I : Id.Accessors) = struct
       register_ids_formula r g
     | M.M_Int _ ->
       ()
+    |M.M_Real _ ->
+      ()
+    | M.M_ROI s ->
+      register_ids_term r s
     | M.M_Sum (s, t) ->
       register_ids_term r s;
       register_ids_term r t
+    | M.M_RSum (s, t) ->
+      register_ids_term r s;
+      register_ids_term r t;
     | M.M_Prod (_, s) ->
       register_ids_term r s
+    | M.M_RProd (_, s) ->
+      register_ids_term r s
     | M.M_Ite (c, s, t) ->
+      register_ids_formula r c;
+      register_ids_term r s;
+      register_ids_term r t
+    | M.M_RIte (c, s, t) ->
       register_ids_formula r c;
       register_ids_term r s;
       register_ids_term r t
@@ -59,6 +72,9 @@ module Make (I : Id.Accessors) = struct
       register_ids_term r b
     | A.A_Le i | A.A_Eq i ->
       register_ids_term r i
+    | A.A_LeF i | A.A_EqF i ->
+      register_ids_term r i
+      
 
   and register_ids_formula r g =
     let f = register_ids_atom r and polarity = `Both in
@@ -76,18 +92,24 @@ module Make (I : Id.Accessors) = struct
       List.rev acc, Type.E_Int
     | Type.Y_Bool ->
       List.rev acc, Type.E_Bool
+    | Type.Y_Real ->
+      List.rev acc, Type.E_Real
     | Type.Y_Int_Arrow y ->
       let acc = Type.E_Int :: acc in
+      args_and_ret_of_type ~acc y
+    | Type.Y_Real_Arrow y ->
+      let acc = Type.E_Real :: acc in
       args_and_ret_of_type ~acc y
     | Type.Y_Bool_Arrow y ->
       let acc = Type.E_Bool :: acc in
       args_and_ret_of_type ~acc y
 
   let string_of_ibtype =
-    let i = "Int" and b = "Bool" in
+    let i = "Int" and b = "Bool" and r = "Real"in
     function
     | Type.E_Int -> i
     | Type.E_Bool -> b
+    | Type.E_Real -> r
 
   let print_declaration oc ~key:(Id.Box.Box id) ~data =
     Printf.fprintf oc "(declare-fun c%d (" data;
@@ -112,6 +134,14 @@ module Make (I : Id.Accessors) = struct
       Printf.fprintf oc "(- %s) " (Int63.to_string (- x))
     else
       Printf.fprintf oc "%s " (Int63.to_string x)
+
+  let print_real oc x =
+    let open Float in 
+    if x < zero then
+      Printf.fprintf oc "(- %f) " (Float.(-. x))
+    else
+      Printf.fprintf oc "%f "  x
+
 
   let rec iter_conjunction g ~f =
     match g with
@@ -139,7 +169,16 @@ module Make (I : Id.Accessors) = struct
       print_formula oc r g
     | M.M_Int x ->
       print_int63 oc x
+    | M.M_Real x ->
+      print_real oc x
     | M.M_Sum (s, t) ->
+      output_string oc "(+ ";
+      print_term oc r s;
+      print_term oc r t;
+      output_string oc ") "
+    | M.M_ROI t ->
+      print_term oc r t
+    | M.M_RSum (s, t) ->
       output_string oc "(+ ";
       print_term oc r s;
       print_term oc r t;
@@ -149,8 +188,19 @@ module Make (I : Id.Accessors) = struct
       print_int63 oc x;
       print_term oc r s;
       output_string oc ") ";
+    | M.M_RProd (x, s) ->
+      output_string oc "(* ";
+      print_real oc x;
+      print_term oc r s;
+      output_string oc ") ";
     | M.M_Ite (c, s, t) ->
       output_string oc "(ite ";
+      print_formula oc r c;
+      print_term oc r s;
+      print_term oc r t;
+      output_string oc ") "
+    | M.M_RIte (c, s, t) ->
+      output_string oc "(rite ";
       print_formula oc r c;
       print_term oc r s;
       print_term oc r t;
@@ -174,6 +224,15 @@ module Make (I : Id.Accessors) = struct
       output_string oc "(= ";
       print_term oc r s;
       output_string oc " 0) "
+    | A.A_EqF s ->
+      output_string oc "(= ";
+      print_term oc r s;
+      output_string oc " 0.0) "
+    | A.A_LeF s ->
+      output_string oc "(<= ";
+      print_term oc r s;
+      output_string oc " 0.0)"
+      
 
   and print_formula oc r = function
     | Formula.F_True ->

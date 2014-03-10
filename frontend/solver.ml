@@ -41,18 +41,7 @@ struct
     compare = S.compare_bvar;
     sexp_of_t = S.sexp_of_bvar
   }
-
-(* Added rvar for real variables. Check what happens with S.compare_rvar, S.sexp_of_rvar*)
-
-(*  let hashable_rvar = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = S.compare_rvar;
-    sexp_of_t = S.sexp_of_rvar
-  }
-*)
-(*End here*)
-    
+ 
   type fid = I.c Id.Box_arrow.t
   with compare, sexp_of
 
@@ -93,36 +82,6 @@ struct
     compare = compare_rid;
     sexp_of_t = sexp_of_rid
   }
-(*
-  type mid =                        (*Remove*)
-    | MID_R of (I.c, float) Id.t
-    | MID_I of (I.c, int) Id.t
-  with compare, sexp_of
-
-  type mvar =                       (*Remove*)
-    | MVAR_R of S.rvar
-    | MVAR_I of S.ivar
-  with compare, sexp_of
-
-  let hashable_mid = {              (*Remove*)
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_mid;
-    sexp_of_t = sexp_of_mid  
-  }
-
-  let hashable_mvar = {             (*Remove*) 
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_mvar;
-    sexp_of_t = sexp_of_mvar
-  }
-
-  (* Mixed (Int + Float) offset variable*)      (*Remove*)
-  type movar = mvar option offset
-  with compare, sexp_of
-*)
-(* End here *)
 
   type ovar = S.ivar option offset
   with compare, sexp_of
@@ -168,18 +127,6 @@ struct
     compare = compare_bg_rsum;
     sexp_of_t = sexp_of_bg_rsum
   }
-
-(*  type bg_msum = mvar rsum
-  with compare, sexp_of
-
- let hashable_bg_msum = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_bg_msum;
-    sexp_of_t = sexp_of_bg_msum
-  }
-*)
-(*end *)
 
   let type_of_term :
   type t . t term -> t Type.t =
@@ -334,20 +281,6 @@ struct
           List.fold_left ~init ~f l) in
     l, Int63.(o' + o)
 
-(*  and iexpr_of_sum_real ({r_rsum_m} as r) (l, o) =
-    let l, o' = 
-      Hashtbl.find_or_add r_rsum_m l
-	~default:(fun () ->
-	  let f (l,o) (c,t) = 
-	    match ovar_of_flat_term_base_real r t with
-	      | Some v, x ->
-		(c,v) :: l, Float.(o + c *x)
-	      | None, x ->
-		l, Float.(o + c * x)
-	  and init = [], Float.zero in
-	  List.fold_left ~init ~f l) in
-    l, Float.(o' + o)
-*)
   and iexpr_of_sum_mixed ({r_msum_m} as r) (l,o) =
     let l, o' =
       Hashtbl.find_or_add r_msum_m l
@@ -399,13 +332,6 @@ struct
     S.add_indicator r_ctx (S_Neg v)  (negate_isum l)  Int63.(o - one);
     S_Pos (Some v)
 
- (* and blast_le_real ?v ({r_ctx} as r) s =
-    let l,o = iexpr_of_sum_real r s
-    and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
-    S.add_real_indicator r_ctx (S_Pos v) l (Float.neg o);
-    S.add_real_indicator r_ctx (S_Neg v) (negate_rsum l) Float.(o - 1.0);
-    S_Pos (Some v) 
- *)
   and blast_le_mixed ?v ({r_ctx} as r) s =
     let l,o = iexpr_of_sum_mixed r s
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
@@ -414,20 +340,7 @@ struct
     S_Pos (Some v)
 
 (* add_indicator expects a list of pairs where the first component is an int. Then it casts int -> to float before passing it to scip. This function is almost identical but handles Float negation and invokes add_real_indicator, similar to the other one but expects floats as first projection*)
-(*  and blast_eq_real ({r_ctx} as r) s =
-    let l, o = iexpr_of_sum_rea r s in
-    let l_neg = negate_rsum l in
-    let b = S.new_bvar r_ctx in
-    let b_lt = S_Pos (S.new_bvar r_ctx)
-    and b_gt = S_Pos (S.new_bvar r_ctx)
-    and b_eq = S_Pos b in
-    S.add_real_indicator r_ctx b_eq l (Float.neg o);
-    S.add_real_indicator r_ctx b_eq l_neg o;
-    S.add_real_indicator r_ctx b_lt l Float.(neg o - 1.0);
-    S.add_real_indicator r_ctx b_gt l_neg Float.(o - 1.0);
-    S.add_clause r_ctx [b_eq; b_lt; b_eq];
-    S_Pos (Some b) 
-*)
+
  and blast_eq_mixed ({r_ctx} as r) s =
     let l, o = iexpr_of_sum_mixed r s in
     let l_neg = negate_rsum l in
@@ -466,14 +379,6 @@ struct
     S.add_call r_ctx (Some v, Int63.zero) f l;
     v
 
-(* and var_of_app_real ({r_ctx; r_call_m} as r) f_id l t =
-    let f = get_f r f_id
-    and l = List.map l ~f:(ovar_of_ibeither r)
-    and default () = S.new_ivar r_ctx t in
-    let v = Hashtbl.find_or_add r_call_m (f, l) ~default in
-    S.add_call_real r_ctx (Some v, Float.zero) f l;
-    v
-*)
   and blast_ite_branch ({r_ctx} as r) xv v e =
     let l, o = iexpr_of_flat_term r e in
     let l = (Int63.minus_one, v) :: l in
@@ -505,27 +410,7 @@ struct
     S.add_real_indicator r_ctx xv  l                (Float.neg o);
     S.add_real_indicator r_ctx xv  (negate_rsum l)  o
 
- (* and ovar_of_ite_real ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
-    let default () =
-      match xvar_of_formula_doit r g with
-      | S_Pos None ->
-        ovar_of_term_mixed r s
-      | S_Neg None ->
-        ovar_of_term_mixed r t
-      | S_Pos (Some bv) ->
-        let v = S.new_ivar r_ctx mip_type_real in
-        blast_ite_branch_real r (S_Pos bv) v s;
-        blast_ite_branch_real r (S_Neg bv) v t;
-        Some v, Float.zero
-      | S_Neg (Some bv) ->
-        let v = S.new_ivar r_ctx mip_type_real in
-        blast_ite_branch_real r (S_Neg bv) v s;
-        blast_ite_branch_real r (S_Pos bv) v t;
-        Some v, Float.zero in
-    Hashtbl.find_or_add r_rovar_of_iite_m i ~default
- *)
-
-and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
+ and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
     let default () =
       match xvar_of_formula_doit r g with
       | S_Pos None ->
@@ -556,26 +441,17 @@ and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) =
     | P.B_Ite i ->
       ovar_of_ite r i
 
-
-(* Added case to process B_VarF. Can't use ovar_of_flat_term_base because manipulates Int offset*)
- (* and ovar_of_flat_term_base_real r = function
-    | P.B_IVar v ->
-      Some (ivar_of_iid r v), Float.zero
-    | P.B_RVar v -> Some (rvar_of_rid r v), Float.zero 
-    | P.B_Formula g ->
-      ovar_of_formula_mixed r g
-    | P.B_App (f_id, l) ->
-      Some (var_of_app r f_id l mip_type_real), Float.zero
-    | P.B_Ite i ->
-    ovar_of_ite_mixed r i
- *)
-
   and ovar_of_flat_term_base_mixed r = function
-    | P.B_IVar v  -> Some (ivar_of_iid r v), Float.zero
-    | P.B_RVar v -> Some (rvar_of_rid r v), Float.zero
-    | P.B_Formula g -> ovar_of_formula_mixed r g
-    | P.B_App (f_id, l) -> Some (var_of_app r f_id l mip_type_real), Float.zero
-    |P.B_Ite i -> ovar_of_ite_mixed r i
+    | P.B_IVar v  ->
+      Some (ivar_of_iid r v), Float.zero
+    | P.B_RVar v -> 
+      Some (rvar_of_rid r v), Float.zero
+    | P.B_Formula g -> 
+      ovar_of_formula_mixed r g
+    | P.B_App (f_id, l) -> 
+      Some (var_of_app r f_id l mip_type_real), Float.zero
+    | P.B_Ite i -> 
+      ovar_of_ite_mixed r i
         
   and ovar_of_term ({r_ctx; r_var_of_sum_m} as r) = function
     | P.G_Base b ->
@@ -613,8 +489,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
             v in
           Hashtbl.find_or_add r_rvar_of_rsum_m l ~default in
         Some v, o)
-    | P.G_Sum s -> raise (Failure "Invalid case")   (* TODO ddd case for this *)
-   
+    | P.G_Sum s -> raise (Failure "Invalid case")     
 
 
   and ovar_of_formula ({r_ctx} as r) g =
@@ -627,17 +502,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       (let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
        Option.map v ~f), Int63.zero
 
-(*
-  and ovar_of_formula_real ({r_ctx} as r) g =   (*Remove *)
-    match xvar_of_formula_doit r g with
-      | S_Pos (Some v) ->
-	Some (S.ivar_of_bvar v), Float.zero                  
-      | S_Pos None -> 
-	None, Float.zero
-      | S_Neg v ->
-	(let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
-	 Option.map v ~f), Float.zero
-  *)
  and ovar_of_formula_mixed ({r_ctx} as r) g =
     match xvar_of_formula_doit r g with
       | S_Pos (Some v) ->
@@ -650,9 +514,9 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
 
 
   and ovar_of_ibeither ({r_ctx} as r) = function
-    | H_Int (P.G_Base b) ->
+    | D_Int (P.G_Base b) ->
       ovar_of_flat_term_base r b
-    | H_Int (P.G_Sum s) ->
+    | D_Int (P.G_Sum s) ->
       (match iexpr_of_sum r s with
       | [], o ->
         None, o
@@ -662,13 +526,41 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
         let v = S.new_ivar r_ctx mip_type_int in
         S.add_eq r_ctx ((Int63.minus_one, v) :: l) (Int63.neg o);
         Some v, Int63.zero)
-    | H_Bool g ->
+    | D_Bool g ->
       ovar_of_formula r g
-    | H_Float (P.G_Base b) -> raise (Failure "Invalid case") (* TODO add case for this*)
-    | H_Float (P.G_SumM s) -> raise (Failure "Invalid case") (*Add case*)
-    | H_Float (P.G_Sum s)  -> raise (Failure "Check this case")
-    | _ -> raise (Failure "Invalid case") (*we shouldn't fine H_Int G_SumM *)
+    | D_Int  (P.G_SumM s) -> raise (Failure "Invalid case") (* we shouldn't find D_Int G_SumM *)
+    | D_Real _ -> raise (Failure "Invalid case")
 
+  and ovar_of_ibreither_mixed ({r_ctx} as r) = function
+    | D_Int (P.G_Base b) ->
+      ovar_of_flat_term_base_mixed r b
+    | D_Int (P.G_Sum s) ->
+      (match iexpr_of_sum r s with
+      | [], o ->
+        None, (Int63.to_float o)
+      | [c, x], o when Int63.(c = Int63.one) ->
+        Some x, (Int63.to_float o)
+      | l, o ->
+        let v = S.new_ivar r_ctx mip_type_int in
+        S.add_eq r_ctx ((Int63.minus_one, v) :: l) (Int63.neg o);
+        Some v, Float.zero)
+    | D_Int (P.G_SumM _) -> raise (Failure "Invalid case")
+    | D_Bool g ->
+      let v, o = ovar_of_formula r g in
+      v, (Int63.to_float o)
+    | D_Real (P.G_Base b) -> 
+      ovar_of_flat_term_base_mixed r b
+    | D_Real (P.G_SumM s) -> 
+      (match iexpr_of_sum_mixed r s with
+	|[], o ->
+	  None, o
+	|[c, x], o when Float.(c = Float.(1.0)) ->
+	  Some x, o
+	|l,o ->
+	  let v = S.new_ivar r_ctx mip_type_real in
+	  S.add_real_eq r_ctx ((Float.(-1.0), v) :: l) (Float.neg o);
+	  Some v, Float.zero)
+    | D_Real (P.G_Sum s)  -> raise (Failure "Invalid case")
 
   and blast_atom ({r_ctx} as r) = function
     | P.G_Base t, O'_Le ->

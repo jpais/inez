@@ -1,5 +1,11 @@
-open Script;;
+(* The following example was taken from 
+Castillo, E., Conejo A.J., Pedregal, P., Garc ́ R. and Alguacil, N. (2002).
+"Building and Solving Mathematical Programming Models in Engineering and
+Science." 
+Pure and Applied Mathematics Series, Wiley, New York.
+*)
 
+open Script;;
 open Core.Std;;
 
 (* Problem definition *)
@@ -83,40 +89,26 @@ let build = make_fl_map locations;;
 (* Satisfy each city demands *)
 constrain
   (~logicr 
-      (forall cities ~f:(fun c -> sumf locations ~f:(fun l -> (production c l)) =. Logic.M.M_Real(demand.(c.c_id)))));;
+      (forall cities ~f:(fun c -> sumr locations ~f:(fun l -> (production c l)) =. Logic.M.M_Real(demand.(c.c_id)))));;
   
   
 (* The production level of each factory cannot exceed its capacity*)
 constrain
   (~logicr
     (forall locations
-      ~f:(fun l -> sumf cities ~f:(fun c -> (production c l)) <=. roi(Int63.of_int(capacity.(l.l_id)) * (build l)))));;
+      ~f:(fun l -> sumr cities ~f:(fun c -> (production c l)) <=. roi(Int63.of_int(capacity.(l.l_id)) * (build l)))));;
   
 
 (* Objective Function *)
-minimize_real
+maximize_real
 (  ~logicr(
-    (sumf cities ~f:(fun c -> 
-           (sumf locations ~f:(fun l -> ~-.(profit.(c.c_id).(l.l_id) *. (production c l))))))
- -. (sumf locations  ~f:(fun l -> roi(~-((Int63.of_int(opening_cost.(l.l_id))) * (build l))))))
+    (sumr cities ~f:(fun c -> 
+           (sumr locations ~f:(fun l -> (profit.(c.c_id).(l.l_id) *. (production c l))))))
+ -. (sumr locations  ~f:(fun l -> roi(((Int63.of_int(opening_cost.(l.l_id))) * (build l))))))
 );;
 
 
 (* Printing Solution *)
-
-let rderef_print id v =
-  match rderef v with
-  | Some i ->
-    Printf.printf "%s = %s\n" id (Float.to_string_hum i)
-  | None ->
-    () ;;
-
-let ideref_print id v =
-  match ideref v with
-  | Some i ->
-    Printf.printf "%s = %s\n" id (Int63.to_string_hum i)
-  | None ->
-    () ;;
 
 let should_build location =
   match List.nth locations (location-1) with

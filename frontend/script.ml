@@ -71,11 +71,25 @@ let minimize o =
   | `Duplicate ->
     raise (Invalid_argument "problem has objective already")
 
+let maximize o =
+  match S.add_objective ctx (Logic.M.(~- o)) with
+    |`Ok -> 
+      ()
+    | `Duplicate ->
+      raise (Invalid_argument "The problem already has an objective.")
 
 let minimize_real o = 
   match S.add_real_objective ctx o with
     | `Ok -> ()
     | `Duplicate -> raise (Invalid_argument "The problem already has an objective")
+
+let maximize_real o =
+  match S.add_real_objective ctx (Logic.M.(~-. o)) with
+    |`Ok -> 
+      ()
+    | `Duplicate ->
+      raise (Invalid_argument "The problem already has an objective.")
+
 
 let solve_print_result () =
   print_endline (string_of_result (solve ()))

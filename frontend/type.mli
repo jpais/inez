@@ -1,4 +1,4 @@
-type ibtype = E_Int | E_Bool | E_Float
+type ibtype = E_Int | E_Bool | E_Real
 
 val ibtype_of_sexp : Sexplib.Sexp.t -> ibtype
 

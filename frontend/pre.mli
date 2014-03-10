@@ -2,7 +2,7 @@ module Make : functor (I : Id.Accessors) -> sig
 
   type fun_id = I.c Id.Box_arrow.t
 
-  type ibflat = (term, formula) Terminology.ifbeither
+  type ibflat = (term, term, formula) Terminology.irbeither
 
   and args = ibflat list
 
@@ -10,15 +10,11 @@ module Make : functor (I : Id.Accessors) -> sig
 
   and sumt = Core.Std.Int63.t * term_base
 
-  (*and sumtf = Core.Std.Float.t * term_base*)
-
   and summ = private
 	     | S_Int of Core.Std.Int63.t * term_base
 	     | S_Real of Core.Std.Float.t * term_base
 
   and sum = sumt list
-
- (* and sumf = sumtf list*)
 
   and suml = summ list
 

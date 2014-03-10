@@ -1,9 +1,9 @@
 open Core.Std
 
-type ibtype = E_Int | E_Bool | E_Float (* Added E_Float*)
+type ibtype = E_Int | E_Bool | E_Real (* Added E_Float*)
 with sexp
 
-(* Added cases for Y_Float and Y_Float_Arrow*)
+(* Added cases for Y_Real and Y_Real_Arrow*)
 
 module U = struct
 
@@ -104,7 +104,7 @@ module T = struct
   type s . s t -> ibtype =
     function
     | Y_Int -> E_Int
-    | Y_Real -> E_Float
+    | Y_Real -> E_Real
     | Y_Bool -> E_Bool
     | Y_Int_Arrow y -> rightmost_ibtype_of_t y
     | Y_Real_Arrow y -> rightmost_ibtype_of_t y
@@ -121,7 +121,7 @@ module Box = struct
   let t_of_ibtype = function
     | E_Int ->
       Box Y_Int
-    | E_Float ->
+    | E_Real ->
       Box Y_Real 
     | E_Bool ->
       Box Y_Bool

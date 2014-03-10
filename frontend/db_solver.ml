@@ -169,19 +169,29 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     fun ~under_forall -> function
     | M.M_Int _ ->
       true
+    |M.M_Real _ -> 
+      true
     | M.M_Var _ ->
       true
     | M.M_Bool g ->
       in_fragment ~under_forall ~polarity:`Both g
+    | M.M_ROI _ -> 
+      raise (Failure "TODO: Undefined case in_fragment_term M_ROI")
     | M.M_Sum (a, b) ->
       in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b
+    | M.M_RSum _ ->
+      raise (Failure "TODO: Undefined case in_fragment_term M_RSum")
     | M.M_Prod (_, a) ->
       in_fragment_term ~under_forall a
+    | M.M_RProd _ ->
+      raise (Failure "TODO: Undefined case in_fragment_term M_RProd")
     | M.M_Ite (q, a, b) ->
       in_fragment ~under_forall ~polarity:`Both q &&
         in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b
+    | M.M_RIte _ ->
+      raise (Failure "TODO: Undefined case in_fragment_term M_RIte")
     | M.M_App (a, b) ->
       in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b

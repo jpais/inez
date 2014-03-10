@@ -11,6 +11,10 @@ module type S = sig
 
   val minimize_real : (c, float) term_plug -> unit
 
+  val maximize : (c, int) term_plug -> unit
+
+  val maximize_real : (c, float) term_plug -> unit
+
   val solve : unit -> Terminology.result
 
   val solve_real : unit -> Terminology.result

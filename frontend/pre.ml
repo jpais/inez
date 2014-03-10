@@ -22,7 +22,7 @@ module Make (I : Id.Accessors) = struct
     raise (Unreachable.Exn _here_)
 
   type ibflat =
-    (term, formula) Terminology.ifbeither
+    (term, term, formula) Terminology.irbeither
 
   (* Some of the definitions below look pedantic, but the
      corresponding compare_* functions are useful. *)
@@ -35,9 +35,6 @@ module Make (I : Id.Accessors) = struct
 
   and sumt =
     Int63.t * term_base
-
-  (*and sumtf =                   (*Remove*)
-    Float.t * term_base *)
 
   and summ = 
      | S_Int of Int63.t * term_base
@@ -603,11 +600,11 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     fun r t ->
       match M.type_of_t t ~f:I.type_of_t' with
       | Type.Y_Int ->
-        H_Int (flatten_int_term r t)
+        D_Int (flatten_int_term r t)
       | Type.Y_Real ->
-        H_Float (flatten_mixed_term r t) 
+        D_Real (flatten_mixed_term r t) 
       | Type.Y_Bool ->
-        H_Bool (flatten_bool_term r t)
+        D_Bool (flatten_bool_term r t)
       | _ ->
         (* not meant for functions *)
         raise (Unreachable.Exn _here_)
