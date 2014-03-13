@@ -44,9 +44,6 @@ module Make (I : Id.Accessors) = struct
   and sum =
     sumt list
 
-  (*and sumf =        (*Remove*)
-    sumtf list *)
-
   and suml =
     summ list
 

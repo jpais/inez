@@ -4,15 +4,13 @@ module S = Solver.Make(Scip.Scip_basic)(Id')
 let ctx = S.make_ctx (Scip.Scip_basic.make_ctx ())
 
 type c = Id'.c
+ 
 
 let constrain =
   S.assert_formula ctx
 
 let solve () =
   S.solve ctx
-
-let solve_real () =
-  S.solve_real ctx;;
 
 let fresh_int_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Int)

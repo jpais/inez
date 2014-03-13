@@ -30,6 +30,10 @@ with compare, sexp
 type 'v rsum            =  'v rmonomial list
 with compare, sexp
 
+type 'v mip_sum         =   J_ISum of 'v isum
+			  | J_RSum of 'v rsum
+with compare, sexp
+
 type 'v iexpr           =  'v isum offset
 with compare, sexp
 

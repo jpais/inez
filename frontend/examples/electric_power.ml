@@ -1,3 +1,9 @@
+(* The following example was taken from 
+Castillo, E., Conejo A.J., Pedregal, P., Garc ́ R. and Alguacil, N. (2002).
+"Building and Solving Mathematical Programming Models in Engineering and
+Science." 
+Pure and Applied Mathematics Series, Wiley, New York.
+*)
 
 (* number of power units *)
 let i = 3
@@ -102,13 +108,12 @@ a maximum power increment, called the rampup limit.*)
 let rampup_constrain unit =
   List.iter intervals ~f:(fun i ->
     if (i.i_id) < ((List.length intervals) - 1) 
-    then( if i.i_id = 0 
+    then( (if i.i_id = 0 
           then constrain(~logicr((output unit i) - (toi (init_pow.(unit.u_id))) <=  
-                                  (toi (max_rampup.(unit.u_id)))));
-               constrain(~logicr((output unit (next_interval i)) - (output unit i) <= 
-                                  (toi (max_rampup.(unit.u_id))))))
+                                  (toi (max_rampup.(unit.u_id))))));
+           constrain(~logicr((output unit (next_interval i)) - (output unit i) <= 
+                             (toi (max_rampup.(unit.u_id)))))
     )
-    else ()
   );;
 
 let rampdown_constrain unit = 
@@ -159,21 +164,27 @@ constrain(
   fun i -> sum units ~f:(
     fun u -> 
       (Int63.of_int (max_pow.(u.u_id))) * (online u i)) >= 
-      (toi (demand.(i.i_id))) + (toi (reserve.(i.i_id))))))
-)));;
+      (toi (demand.(i.i_id))) + (toi (reserve.(i.i_id))))));;
 
 
-let z = ~logicr(sumr intervals ~f:(fun i -> sumr units ~f:(fun u -> fixed.(u.u_id)    *. roi(online u i) +.
-                                                                    variable.(u.u_id) *. roi(output u i) +. 
-                                                                    startup.(u.u_id)  *. roi(starting u i) +.    
-                                                                    shutdown.(u.u_id) *. roi(shutting u i))));;
+let z = ~logicr(sumr intervals ~f:(
+                 fun i -> sumr units ~f:(
+		   fun u -> fixed.(u.u_id)    *. roi(online u i) +.
+                            variable.(u.u_id) *. roi(output u i) +. 
+                            startup.(u.u_id)  *. roi(starting u i) +.    
+                            shutdown.(u.u_id) *. roi(shutting u i))));;
 
-let objective_var=
+
+(* Force an integer objective value 
+let obj_var=
   let v = fresh_int_var() in
   constrain(~logicr(roi(v) =. z));v;;
+*)
+let obj_var = 
+  let v = fresh_real_var() in
+  constrain(~logicr(v =. z));v;;
 
-
-minimize_real z;;
+minimize_real obj_var;;
 
 
 let print_solution list =

@@ -11,9 +11,7 @@ module type S = sig
 
   val solve : ctx -> Terminology.result
 
-  val solve_real : ctx -> Terminology.result
-
-  val add_objective :
+    val add_objective :
     ctx -> (c, int) Logic.M.t -> [> `Duplicate | `Ok]
 
   val add_real_objective :

@@ -261,8 +261,10 @@ struct
   let negate_isum =
     List.map ~f:(Tuple2.map1 ~f:Int63.neg)
 
-  let negate_rsum = 
-    List.map ~f:(Tuple2.map1 ~f:(Float.neg))
+  let negate_rsum = function
+    | J_ISum s -> J_ISum (List.map ~f:(Tuple2.map1 ~f:Int63.neg) s)
+    | J_RSum s -> J_RSum (List.map ~f:(Tuple2.map1 ~f:(Float.neg)) s)
+
 
   (* linearizing terms and formulas: mutual recursion, because terms
      contain formulas and vice versa *)
@@ -304,7 +306,7 @@ struct
     l, Float.(o' + o)
       
 
-  and iexpr_of_flat_term r = function
+ (* and iexpr_of_flat_term r = function
     | P.G_Sum s ->
       iexpr_of_sum r s
     | P.G_Base b ->
@@ -314,35 +316,51 @@ struct
       | None, x ->
         [], x)
     | P.G_SumM s -> raise (Unreachable.Exn _here_)
-
-  and iexpr_of_flat_term_mixed r = function
-    | P.G_SumM s -> iexpr_of_sum_mixed r s
+ *)
+  and iexpr_of_flat_term r = function
+    | P.G_SumM s -> let l, o = iexpr_of_sum_mixed r s in
+		    (J_RSum l), o
     | P.G_Base b ->
      (match ovar_of_flat_term_base_mixed r b with
       | Some v, x ->
-        [Float.(1.0), v], x
+        (J_RSum [Float.(1.0), v]), x
       | None, x ->
-        [], x)
-    | P.G_Sum s -> raise (Unreachable.Exn _here_)      
+        (J_RSum []), x)
+    | P.G_Sum s -> let l, o = iexpr_of_sum r s in    
+                   (J_ISum l), (Int63.to_float o)
 
   and blast_le ?v ({r_ctx} as r) s =
-    let l, o = iexpr_of_sum r s
+    let l, o = iexpr_of_sum r s in
+    let l' = (J_ISum l) 
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
-    S.add_indicator r_ctx (S_Pos v)  l                (Int63.neg o);
-    S.add_indicator r_ctx (S_Neg v)  (negate_isum l)  Int63.(o - one);
-    S_Pos (Some v)
-
-  and blast_le_mixed ?v ({r_ctx} as r) s =
-    let l,o = iexpr_of_sum_mixed r s
+    blast_le_aux v r_ctx l' (Int63.to_float o)
+  
+ and blast_le_mixed ?v ({r_ctx} as r) s =
+    let l,o = iexpr_of_sum_mixed r s in
+    let l' = (J_RSum l)
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
+    blast_le_aux v r_ctx l' o
+  
+ and blast_le_aux v r_ctx l o =
     S.add_real_indicator r_ctx (S_Pos v) l (Float.neg o);
     S.add_real_indicator r_ctx (S_Neg v) (negate_rsum l) Float.(o - 1.0);
     S_Pos (Some v)
 
+   
+
 (* add_indicator expects a list of pairs where the first component is an int. Then it casts int -> to float before passing it to scip. This function is almost identical but handles Float negation and invokes add_real_indicator, similar to the other one but expects floats as first projection*)
 
- and blast_eq_mixed ({r_ctx} as r) s =
+  and blast_eq_mixed ({r_ctx} as r) s =
     let l, o = iexpr_of_sum_mixed r s in
+    let l' = (J_RSum l) in
+    blast_eq_aux r_ctx l' o
+
+  and blast_eq ({r_ctx} as r) s =
+    let l, o = iexpr_of_sum r s in
+    let l' = (J_ISum l) in
+    blast_eq_aux r_ctx l' (Int63.to_float o)
+
+  and blast_eq_aux r_ctx l o =
     let l_neg = negate_rsum l in
     let b = S.new_bvar r_ctx in
     let b_lt = S_Pos (S.new_bvar r_ctx)
@@ -355,22 +373,6 @@ struct
     S.add_clause r_ctx [b_eq; b_lt; b_eq];
     S_Pos (Some b) 
 
-    
-  and blast_eq ({r_ctx} as r) s =
-    let l, o = iexpr_of_sum r s in
-    let l_neg = negate_isum l in
-    let b    = S.new_bvar r_ctx in
-    let b_lt = S_Pos (S.new_bvar r_ctx)
-    and b_gt = S_Pos (S.new_bvar r_ctx)
-    and b_eq = S_Pos b in
-    S.add_indicator r_ctx b_eq  l      (Int63.neg o);
-    S.add_indicator r_ctx b_eq  l_neg  o;
-    S.add_indicator r_ctx b_lt  l      Int63.(neg o - one);
-    S.add_indicator r_ctx b_gt  l_neg  Int63.(o - one);
-    S.add_clause r_ctx [b_eq; b_lt; b_gt];
-    S_Pos (Some b)
-
-(*Do I need a version for real numbers?*)
   and var_of_app ({r_ctx; r_call_m} as r) f_id l t =
     let f = get_f r f_id
     and l = List.map l ~f:(ovar_of_ibeither r)
@@ -381,9 +383,11 @@ struct
 
   and blast_ite_branch ({r_ctx} as r) xv v e =
     let l, o = iexpr_of_flat_term r e in
-    let l = (Int63.minus_one, v) :: l in
-    S.add_indicator r_ctx xv  l                (Int63.neg o);
-    S.add_indicator r_ctx xv  (negate_isum l)  o
+    let l' = (match l with
+               | J_ISum s -> J_ISum ((Int63.minus_one, v) :: s)
+	       | J_RSum s -> J_RSum ((Float.(-1.0), v) :: s)) in
+    S.add_real_indicator r_ctx xv  l'                (Float.neg o);
+    S.add_real_indicator r_ctx xv  (negate_rsum l')  o
 
   and ovar_of_ite ({r_ctx; r_ovar_of_iite_m} as r) ((g, s, t) as i) =
     let default () =
@@ -404,13 +408,7 @@ struct
         Some v, Int63.zero in
     Hashtbl.find_or_add r_ovar_of_iite_m i ~default
 
-  and blast_ite_branch_mixed ({r_ctx} as r) xv v e =
-    let l, o = iexpr_of_flat_term_mixed r e in
-    let l = (Float.(-1.0), v) :: l in
-    S.add_real_indicator r_ctx xv  l                (Float.neg o);
-    S.add_real_indicator r_ctx xv  (negate_rsum l)  o
-
- and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
+  and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
     let default () =
       match xvar_of_formula_doit r g with
       | S_Pos None ->
@@ -419,16 +417,15 @@ struct
         ovar_of_term_mixed r t
       | S_Pos (Some bv) ->
         let v = S.new_ivar r_ctx mip_type_real in
-        blast_ite_branch_mixed r (S_Pos bv) v s;
-        blast_ite_branch_mixed r (S_Neg bv) v t;
+        blast_ite_branch r (S_Pos bv) v s;
+        blast_ite_branch r (S_Neg bv) v t;
         Some v, Float.zero
       | S_Neg (Some bv) ->
         let v = S.new_ivar r_ctx mip_type_real in
-        blast_ite_branch_mixed r (S_Neg bv) v s;
-        blast_ite_branch_mixed r (S_Pos bv) v t;
+        blast_ite_branch r (S_Neg bv) v s;
+        blast_ite_branch r (S_Pos bv) v t;
         Some v, Float.zero in
     Hashtbl.find_or_add r_rovar_of_iite_m i ~default
-
 
   and ovar_of_flat_term_base r = function
     | P.B_IVar v ->
@@ -502,7 +499,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       (let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
        Option.map v ~f), Int63.zero
 
- and ovar_of_formula_mixed ({r_ctx} as r) g =
+  and ovar_of_formula_mixed ({r_ctx} as r) g =
     match xvar_of_formula_doit r g with
       | S_Pos (Some v) ->
 	Some (S.ivar_of_bvar v), Float.zero                  
@@ -511,7 +508,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       | S_Neg v ->
 	(let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
 	 Option.map v ~f), Float.zero
-
 
   and ovar_of_ibeither ({r_ctx} as r) = function
     | D_Int (P.G_Base b) ->
@@ -719,21 +715,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       R_Unsat
     | Some o, false ->
       let l, _ = iexpr_of_flat_term r o in
-      (match S.add_objective r_ctx l with
-      | `Duplicate ->
-        raise (Unreachable.Exn _here_)
-      | `Ok ->
-        S.solve r_ctx)
-    | None, false ->
-      S.solve r_ctx
-
-  let solve_real ({r_ctx; r_obj} as r) =
-    bg_assert_all_cached r;
-    match r_obj, r.r_unsat with
-    | _, true ->
-      R_Unsat
-    | Some o, false ->
-      let l, _ = iexpr_of_flat_term_mixed r o in
       (match S.add_real_objective r_ctx l with
       | `Duplicate ->
         raise (Unreachable.Exn _here_)
@@ -742,7 +723,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | None, false ->
       S.solve r_ctx
 
-  let add_objective ({r_obj; r_pre_ctx} as r) o =
+   let add_objective ({r_obj; r_pre_ctx} as r) o =
     match r_obj with
     | None ->
       let m = P.flatten_int_term r_pre_ctx o in
@@ -757,18 +738,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       r.r_obj <- Some m; `Ok
     | Some _ ->
       `Duplicate
-
- (* let add_objective_test ({r_obj; r_pre_ctx} as r) o =
-      match r_obj with
-	| None -> 
-	  let m = (match M.type_of_t o ~f:I.type_of_t' with
-	            | Type.Y_Int  -> P.flatten_int_term r_pre_ctx o
-     		    | Type.Y_Real -> P.flatten_mixed_term r_pre_ctx o
-		    | _ -> raise (Unreachable.Exn _here_)) in   
-	  r.r_obj <- Some m; `Ok
-	| Some _ ->
-	  `Duplicate
- *)
 
   let deref_int {r_ctx; r_ivar_m} id =
     Option.(Hashtbl.find r_ivar_m id >>= S.ideref r_ctx)

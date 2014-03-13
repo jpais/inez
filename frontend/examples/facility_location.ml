@@ -119,3 +119,14 @@ let exp_prod city location =
   match List.nth cities (city-1), List.nth locations (location-1)  with
     | Some x, Some y -> rderef_print (sprintf("Production from Location %d to City %d") location city) (production x y)
     | _ -> raise (Failure "Out of bounds");;
+
+let print_production () =
+  List.iter locations ~f:(fun l ->
+    if (ideref (build l) = (Some Int63.one))
+    then( List.iter cities ~f:(fun c ->
+          (match rderef (production c l) with
+	     | Some x -> printf "%f" x
+	     | None -> raise (Failure "Error while reading the variable"));
+          printf "  ");
+	  printf "\n")
+);;

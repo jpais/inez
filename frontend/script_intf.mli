@@ -1,9 +1,11 @@
 module type S = sig
 
   type c
-
+ 
   type (_, _) term_plug
-  type _ atom_plug
+  type _ atom_plug  
+   
+
 
   val constrain : c atom_plug Formula.t -> unit
 
@@ -16,8 +18,6 @@ module type S = sig
   val maximize_real : (c, float) term_plug -> unit
 
   val solve : unit -> Terminology.result
-
-  val solve_real : unit -> Terminology.result
 
   val fresh_int_var : unit -> (c, int) term_plug
 

@@ -38,8 +38,6 @@ let maximize_real o = () (* TODO: Add body to the function or merge with maximiz
 let solve () =
   S.solve ctx
 
-let solve_real () = Terminology.R_Unknown (* TODO: Add body to the function or merge with solve *)
-
 let fresh_int_var () =
   Db_logic.M.M_Var (Id'.gen_id Type.Y_Int)
 

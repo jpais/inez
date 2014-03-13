@@ -246,13 +246,19 @@ let add_indicator ({r_ctx} as r) v l o =
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_real_indicator ({r_ctx} as r) v l o =
+  let variables, coeffs = match l with
+    | J_ISum s -> 
+      Array.of_list_map ~f:snd s, 
+      Array.of_list_map ~f:(Fn.compose Int63.to_float fst) s
+    | J_RSum s -> 
+      Array.of_list_map ~f:snd s, Array.of_list_map ~f:fst s in
   let c =
     assert_ok1 _here_
       (sCIPcreateConsBasicIndicator r_ctx
 	 (make_constraint_id r)
 	 (var_of_var_signed r v)
-	 (Array.of_list_map ~f:snd l)
-	 (Array.of_list_map ~f:fst l)
+	 (variables)
+	 (coeffs)
 	 o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
@@ -291,11 +297,16 @@ let add_objective {r_ctx; r_has_objective} l =
 let add_real_objective {r_ctx; r_has_objective} l =
   if r_has_objective then
     `Duplicate
-  else
-    (List.iter l
-       ~f:(fun (c, v) ->
-           assert_ok _here_ (sCIPchgVarObj r_ctx v c));
-     `Ok)
+  else match l with
+        | J_ISum s -> (List.iter s
+                        ~f:(fun (c, v) ->
+                             let c = Int63.to_float c in
+                             assert_ok _here_ (sCIPchgVarObj r_ctx v c));
+                      `Ok)
+	| J_RSum s ->  (List.iter s
+			  ~f:(fun (c, v) ->
+			    assert_ok _here_ (sCIPchgVarObj r_ctx v c));
+			`Ok)
 
 let result_of_status = function
   | SCIP_STATUS_OPTIMAL ->
