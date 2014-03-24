@@ -667,11 +667,11 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
       flatten_bool_term r t
     | Formula.F_Atom (A.A_Le t) ->
       U_Atom (flatten_int_term r t, O'_Le)
-    | Formula.F_Atom (A.A_LeF t) ->
+    | Formula.F_Atom (A.A_LeR t) ->
       U_Atom (flatten_mixed_term r t, O'_Le)
     | Formula.F_Atom (A.A_Eq t) ->
       U_Atom (flatten_int_term r t, O'_Eq)
-    | Formula.F_Atom (A.A_EqF t) ->
+    | Formula.F_Atom (A.A_EqR t) ->
       U_Atom (flatten_mixed_term r t, O'_Eq) 
     | Formula.F_Not g ->
       negate (flatten_formula r g)

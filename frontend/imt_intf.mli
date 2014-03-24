@@ -27,6 +27,18 @@ module type S_bvar = sig
 
 end
 
+module type S_rvar = sig
+
+  type rvar
+
+  val compare_rvar : rvar -> rvar -> int
+
+  val hash_rvar : rvar -> int
+
+  val sexp_of_rvar : rvar -> Sexplib.Sexp.t
+
+end
+
 module type S_essentials = sig
 
   (** context *)
@@ -36,9 +48,13 @@ module type S_essentials = sig
 
   include S_bvar
 
+  include S_rvar
+
   val ivar_of_bvar : bvar -> ivar
 
   val bvar_of_ivar : ivar -> bvar
+
+  val rvar_of_ivar : ivar -> rvar
 
 end
 
@@ -65,12 +81,17 @@ module type S_access = sig
 
   val new_f : ctx -> string -> int -> f
 
-  (** define an integer/real variable with optional lower and upper
+  (** define an integer variable with optional lower and upper
       bounds *)
   val new_ivar : ctx -> mip_type -> ivar
 
+  val new_ivar' : ctx -> Core.Std.Int63.t option -> Core.Std.Int63.t option -> ivar
+
   (** define a boolean variable *)
   val new_bvar : ctx -> bvar
+
+  (** define a real variable *)
+  val new_rvar : ctx -> Core.Std.Float.t option -> Core.Std.Float.t option -> rvar
 
   (** [negate_bvar ctx v] = not v *)
   val negate_bvar : ctx -> bvar -> bvar
@@ -109,7 +130,7 @@ module type S_access = sig
 
   val bderef : ctx -> bvar -> bool option
 
-  val rderef : ctx -> ivar -> Float.t option
+  val rderef : ctx -> rvar -> Float.t option
 
   val write_ctx : ctx -> string -> unit
 
@@ -137,17 +158,62 @@ module type S_int_bounds = sig
 
 end
 
+module type S_real_bounds = sig
+
+  type ctx
+
+  type sol
+
+  type t
+
+  val get_real_lb_local : ctx -> t -> Float.t option
+
+  val get_real_ub_local : ctx -> t -> Float.t option
+
+  val set_real_lb_local :
+    ctx -> t -> Float.t -> [`Infeasible | `Ok | `Tightened]
+
+  val set_real_ub_local :
+    ctx -> t -> Float.t -> [`Infeasible | `Ok | `Tightened]
+
+  val rderef_sol : ctx -> sol -> t -> Float.t
+
+end
+
+
 module type S_dp_access_bounds = sig
+
+  type sol
 
   include S_essentials
 
-  include S_int_bounds with type ctx := ctx and type t := ivar
-
+  include S_int_bounds with type ctx := ctx 
+		       and type t := ivar
+		       and type sol := sol
+  include S_real_bounds with type ctx := ctx
+			and type t:= rvar
+			and type sol := sol
+		       
   val bderef_local : ctx -> bvar -> bool option
 
   val bderef_sol : ctx -> sol -> bvar -> bool
 
 end
+
+
+(*module type S_dp_real_access_bounds = sig
+
+  include S_essentials
+
+  include S_real_bounds with type ctx := ctx
+			and type t := rvar
+ 
+  val bderef_local : ctx -> bvar -> bool option
+
+  val bderef_sol : ctx -> sol -> bvar -> bool
+
+end
+*)
 
 module type S_dp_access = sig
 
@@ -161,10 +227,37 @@ module type S_dp_access = sig
     middle:float -> n:int -> width:float ->
     [`Ok | `Fail]
 
+  val rbranch :
+    ctx -> rvar -> float -> [`Ok | `Fail]
+
+  val rbranch_nary :
+    ctx -> rvar ->
+    middle:float -> n:int -> width:float ->
+    [`Ok | `Fail]
+
+   val bbranch :
+    ctx -> bvar -> [`Ok | `Fail]
+
+end
+
+
+(*module type S_dp_real_access = sig
+ 
+  include S_dp_real_access_bounds
+
+  val rbranch :
+    ctx -> rvar -> float -> [`Ok | `Fail]
+
+  val rbranch_nary :
+    ctx -> rvar ->
+    middle:float -> n:int -> width:float ->
+    [`Ok | `Float]
+
   val bbranch :
     ctx -> bvar -> [`Ok | `Fail]
 
 end
+*)
 
 module type Dvars_access = sig
 
@@ -184,6 +277,26 @@ module type Dvars_access = sig
 
 end
 
+
+module type Dvars_real_access = sig
+
+  type ctx_plug
+
+  type sol_plug
+
+  include (S_real_bounds
+           with type ctx := ctx_plug
+           and type sol := sol_plug)
+
+  val sexp_of_t : t -> Sexplib.Sexp.t
+
+  val compare : t -> t -> int
+
+  val hashable : t Hashtbl.Hashable.t
+
+end
+
+
 module type S_cut_gen_access = sig
 
   include S_dp_access_bounds
@@ -193,10 +306,34 @@ module type S_cut_gen_access = sig
      with type ctx_plug := ctx
      and type sol_plug := sol)
 
-  val add_cut_local :
-    ctx -> ivar Terminology.iexpr -> unit
+  module Drvars :
+    (Dvars_real_access
+       with type ctx_plug := ctx
+       and type sol_plug := sol)
+
+   val add_real_cut_local :
+     ctx -> rvar Terminology.rexpr -> unit
+
+   val add_cut_local :
+     ctx -> ivar Terminology.iexpr -> unit
 
 end
+
+(*module type S_cut_gen_real_access = sig
+
+  include S_dp_access_bounds
+
+  module Drvars :
+    (Dvars_real_access
+     with type ctx_plug := ctx
+     and type sol_plug := sol)
+
+   val add_real_cut_local :
+    ctx -> rvar Terminology.rexpr -> unit
+
+end
+*)
+
 
 module type S_unit_creatable = sig
   include S_access
@@ -214,6 +351,7 @@ module type S_dp = sig
 
   type ivar_plug
   type bvar_plug
+  type rvar_plug
 
   include Ctx_intf.S_unit_creatable
 
@@ -221,7 +359,8 @@ module type S_dp = sig
 
     (S : S_dp_access
      with type ivar := ivar_plug
-     and type bvar := bvar_plug) :
+     and type bvar := bvar_plug
+     and type rvar := rvar_plug) :
 
   sig
 
@@ -253,7 +392,8 @@ module type S_with_dp = sig
 
     (D : S_dp
      with type ivar_plug := ivar
-     and type bvar_plug := bvar) :
+     and type bvar_plug := bvar
+     and type rvar_plug := rvar) :
 
   sig
 
@@ -261,7 +401,8 @@ module type S_with_dp = sig
       (S_essentials
        with type ctx = ctx
        and type ivar = ivar
-       and type bvar = bvar)
+       and type bvar = bvar
+       and type rvar = rvar)
       
     include
       (S_uf with type f = f)
@@ -271,6 +412,7 @@ module type S_with_dp = sig
        with type ctx := ctx
        and type ivar := ivar
        and type bvar := bvar
+       and type rvar := rvar
        and type f := f)
 
     val register_ivar :
@@ -278,6 +420,9 @@ module type S_with_dp = sig
 
     val register_bvar :
       ctx -> bvar -> unit
+
+    val register_rvar :
+      ctx -> rvar -> unit
 
     val make_ctx : D.ctx -> ctx
 
@@ -289,8 +434,10 @@ module type S_cut_gen = sig
 
   type ivar_plug
   type bvar_plug
-  type dvar_plug
-
+  type rvar_plug
+  type dvar_int_plug
+  type dvar_real_plug
+ 
   include Ctx_intf.S_unit_creatable
 
   module F
@@ -298,7 +445,9 @@ module type S_cut_gen = sig
     (S : S_cut_gen_access
      with type ivar := ivar_plug
      and type bvar := bvar_plug
-     and type Dvars.t = dvar_plug) :
+     and type rvar := rvar_plug
+     and type Dvars.t = dvar_int_plug
+     and type Drvars.t = dvar_real_plug):
 
   sig
 
@@ -338,12 +487,26 @@ module type S_with_cut_gen = sig
 
   end
 
+  module Drvars : sig
+
+    include 
+      (Dvars_real_access
+       with type ctx_plug := ctx
+       and type sol_plug := sol)
+
+    val create_real_dvar :
+      ctx -> rvar option roffset -> rvar option roffset -> t
+
+  end
+
   module F
 
     (D : S_cut_gen
      with type ivar_plug := ivar
      and type bvar_plug := bvar
-     and type dvar_plug := Dvars.t) :
+     and type rvar_plug := rvar
+     and type dvar_int_plug  := Dvars.t
+     and type dvar_real_plug := Drvars.t) :
 
   sig
 
@@ -351,7 +514,8 @@ module type S_with_cut_gen = sig
       (S_essentials
        with type ctx = ctx
        and type ivar = ivar
-       and type bvar = bvar)
+       and type bvar = bvar
+       and type rvar = rvar)
       
     include
       (S_uf with type f = f)
@@ -361,6 +525,7 @@ module type S_with_cut_gen = sig
        with type ctx := ctx
        and type ivar := ivar
        and type bvar := bvar
+       and type rvar := rvar
        and type f := f)
 
     val make_ctx : D.ctx -> ctx
@@ -371,7 +536,16 @@ module type S_with_cut_gen = sig
       ivar option offset ->
       Dvars.t
 
+    val create_real_dvar :
+      ctx ->
+      rvar option roffset ->
+      rvar option roffset ->
+      Drvars.t
+   
   end
+
+
+
 
 end
 

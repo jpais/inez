@@ -72,7 +72,7 @@ module Make (I : Id.Accessors) = struct
       register_ids_term r b
     | A.A_Le i | A.A_Eq i ->
       register_ids_term r i
-    | A.A_LeF i | A.A_EqF i ->
+    | A.A_LeR i | A.A_EqR i ->
       register_ids_term r i
       
 
@@ -224,11 +224,11 @@ module Make (I : Id.Accessors) = struct
       output_string oc "(= ";
       print_term oc r s;
       output_string oc " 0) "
-    | A.A_EqF s ->
+    | A.A_EqR s ->
       output_string oc "(= ";
       print_term oc r s;
       output_string oc " 0.0) "
-    | A.A_LeF s ->
+    | A.A_LeR s ->
       output_string oc "(<= ";
       print_term oc r s;
       output_string oc " 0.0)"

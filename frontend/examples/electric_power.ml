@@ -11,13 +11,13 @@ let i = 3
 let k = 3
 
 (* startup costs per unit, constant for all time periods*)
-let startup = [|20.0;18.0;5.0|]
+let startup = [|20000;18000;5000|]
 (*shutdown cost per unit*)
-let shutdown = [|0.5;0.3;1.0 |]
+let shutdown = [|500;300;1000 |]
 (* fixed cost per unit *)
-let fixed = [|5.0;7.0;6.0|]
+let fixed = [|5000;7000;6000|]
 (* variable cost per unit *) 
-let variable = [|0.100;0.125;0.150|]
+let variable = [|100;125;150|]
 (* minimum output power per unit*)
 let min_pow = [|50;80;40|]
 (* maximum output power per unit*)
@@ -174,11 +174,19 @@ let z = ~logicr(sumr intervals ~f:(
                             startup.(u.u_id)  *. roi(starting u i) +.    
                             shutdown.(u.u_id) *. roi(shutting u i))));;
 
+let z = ~logicr(sum intervals ~f:(
+                 fun i -> sum units ~f:(
+		   fun u -> ( (Int63.of_int (fixed.(u.u_id   ))) * (online u i) +
+                              (Int63.of_int (variable.(u.u_id))) * (output u i) + 
+                              (Int63.of_int (startup.(u.u_id ))) * (starting u i) +    
+                              (Int63.of_int (shutdown.(u.u_id))) * (shutting u i) ))));;
+
+
 
 (* Force an integer objective value 
 let obj_var=
   let v = fresh_int_var() in
-  constrain(~logicr(roi(v) =. z));v;;
+  constrain(~logicr(v = z));v;;
 *)
 let obj_var = 
   let v = fresh_real_var() in

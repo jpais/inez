@@ -18,9 +18,16 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
   type ibentry =
     (S'.ovar Lazy.t, S'.xvar Lazy.t) ibeither
 
+(*Added*)
+  type irbentry =       
+      (S'.ovar Lazy.t, S'.rovar Lazy.t, S'.xvar Lazy.t) irbeither
+
   type table_lazy = S'.ovar list list Lazy.t
 
   type in_constraint_lazy = ibentry list * table_lazy
+
+(* Added *)
+  type irb_constraint_lazy = irbentry list * table_lazy
 
   type d_boxed = DBox : (I.c, 's) R.t list -> d_boxed
 
@@ -42,6 +49,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     r_mode          :  mode;
     r_table_lazy_h  :  (d_boxed, table_lazy) Hashtbl.t;
     r_in_m          :  (bool_id, in_constraint_lazy list) Hashtbl.t;
+    r_in_m_irb      :  (bool_id, irb_constraint_lazy list) Hashtbl.t;  (* Added *)
     r_smtlib_ctx    :  Smt.ctx option;
   }
 
@@ -58,6 +66,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
         Hashtbl.Poly.create () ~size:32;
       r_in_m = 
         Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
+      r_in_m_irb =
+	Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
       r_smtlib_ctx =
         match r_mode with
         | `Smt_out ->
@@ -71,6 +81,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     function
     | S.S_Int ->
       R.R_Int (M.M_Var (I.gen_id Type.Y_Int))
+    | S.S_Real ->
+      R.R_Real (M.M_Var (I.gen_id Type.Y_Real))
     | S.S_Bool ->
       R.R_Bool (M.M_Var (I.gen_id Type.Y_Bool))
     | S.S_Pair (a, b) ->
@@ -93,6 +105,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     function
     | S.S_Int ->
       R.R_Int (M.M_Var (I.gen_id Type.Y_Int))
+    | S.S_Real ->
+      R.R_Real (M.M_Var (I.gen_id Type.Y_Real))
     | S.S_Bool ->
       R.R_Bool (M.M_Var (I.gen_id Type.Y_Bool))
     | S.S_Pair (a, b) ->
@@ -110,7 +124,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     | D.D_Sel (a, _) ->
       get_symbolic_row_db a
 
-  let force_row {r_ctx} =
+  let force_row {r_ctx} =    
     List.map
       ~f:(function
       | H_Int i ->
@@ -127,6 +141,24 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
         | S_Neg None ->
           None, Int63.zero))
 
+  let force_row_irb {r_ctx} = (* TODO: Check if it's ok to return float *)
+    List.map
+      ~f:(function
+	| D_Int i -> 
+	  Lazy.force i
+	| D_Real r -> 
+	  Lazy.force r
+	| D_Bool b -> 
+	  (match Lazy.force b with
+	    | S_Pos (Some b) ->
+	      Some (Imt'.ivar_of_bvar b), Float.zero
+	    | S_Neg (Some b) ->
+	      Some (Imt'.ivar_of_bvar (S'.negate_bvar r_ctx b)), Float.zero
+	    | S_Pos None ->
+	      None, Float.zero
+	    | S_Neg None ->
+	      None, Float.zero))
+ 
   type polarity = [ `Positive | `Negative | `Both ]
 
   let negate_polarity = function
@@ -139,6 +171,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     let under_forall = false in
     function
     | R.R_Int m ->
+      in_fragment_term ~under_forall m
+    | R.R_Real m ->
       in_fragment_term ~under_forall m
     | R.R_Bool b ->
       in_fragment_term ~under_forall b
@@ -169,29 +203,32 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     fun ~under_forall -> function
     | M.M_Int _ ->
       true
-    |M.M_Real _ -> 
+    | M.M_Real _ -> 
       true
     | M.M_Var _ ->
       true
     | M.M_Bool g ->
       in_fragment ~under_forall ~polarity:`Both g
-    | M.M_ROI _ -> 
-      raise (Failure "TODO: Undefined case in_fragment_term M_ROI")
+    | M.M_ROI i -> 
+      in_fragment_term ~under_forall i
     | M.M_Sum (a, b) ->
       in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b
-    | M.M_RSum _ ->
-      raise (Failure "TODO: Undefined case in_fragment_term M_RSum")
+    | M.M_RSum (a, b) ->
+      in_fragment_term ~under_forall a &&
+        in_fragment_term ~under_forall b
     | M.M_Prod (_, a) ->
       in_fragment_term ~under_forall a
-    | M.M_RProd _ ->
-      raise (Failure "TODO: Undefined case in_fragment_term M_RProd")
+    | M.M_RProd (_, a) ->
+      in_fragment_term ~under_forall a
     | M.M_Ite (q, a, b) ->
       in_fragment ~under_forall ~polarity:`Both q &&
         in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b
-    | M.M_RIte _ ->
-      raise (Failure "TODO: Undefined case in_fragment_term M_RIte")
+    | M.M_RIte (q, a, b) ->
+      in_fragment ~under_forall ~polarity:`Both q &&
+        in_fragment_term ~under_forall a &&
+        in_fragment_term ~under_forall b
     | M.M_App (a, b) ->
       in_fragment_term ~under_forall a &&
         in_fragment_term ~under_forall b
@@ -224,6 +261,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
       in_fragment_term ~under_forall b
     | Formula.F_Atom (A.A_Le m | A.A_Eq m) ->
       in_fragment_term ~under_forall m
+    | Formula.F_Atom (A.A_LeR m | A.A_EqR m) ->
+      in_fragment_term ~under_forall m
 
   let register_membership_bulk   {r_in_m} b l =
     Hashtbl.change r_in_m b
@@ -249,7 +288,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
       let acc = f :: acc in
       path_and_data_of_db d ~acc 
 
-  let rec list_of_row_aux :
+  let rec list_of_row_aux :         
   type s. ibentry list -> ctx -> (I.c, s) R.t ->
     ibentry list =
     fun acc ({r_ctx} as x) r ->
@@ -266,10 +305,39 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
       | R.R_Pair (r1, r2) ->
         let acc = list_of_row_aux acc x r1 in
         list_of_row_aux acc x r2
+      | R.R_Real _ ->
+	raise (Failure "TODO: Undefined case. Replace this function with the irbentry version")
 
   and list_of_row :
   type s. ctx -> (I.c, s) R.t -> ibentry list =
     fun x r -> List.rev (list_of_row_aux [] x r)
+
+  and list_of_irb_row_aux :
+  type s. irbentry list -> ctx -> (I.c, s) R.t ->
+      irbentry list =
+      fun acc ({r_ctx} as x) r ->
+	let f = purify_atom x in
+	match r with
+	  | R.R_Int m ->
+	    let m = C.map_non_atomic m ~f ~fv in
+	    let m = S'.ovar_of_term r_ctx m in
+	    D_Int m :: acc
+	  | R.R_Real m ->
+	    let m = C.map_non_atomic m ~f ~fv in
+	    let m = S'.ovar_of_term_mixed r_ctx m in
+	    D_Real m :: acc
+	  | R.R_Bool m ->
+            let m = C.map_non_atomic m ~f ~fv in
+            let m = S'.xvar_of_term r_ctx m in
+            D_Bool m :: acc
+	  | R.R_Pair (r1, r2) ->
+            let acc = list_of_irb_row_aux acc x r1 in
+            list_of_irb_row_aux acc x r2
+
+  and list_of_irb_row :
+  type s. ctx -> (I.c, s) R.t -> irbentry list =
+      fun x r -> List.rev (list_of_irb_row_aux [] x r)
+
 
   and table_lazy_of_db :
   type s . ctx -> (I.c, s) R.t list -> table_lazy =
@@ -310,6 +378,10 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
         let m1 = C.map_non_atomic m1 ~f ~fv
         and m2 = C.map_non_atomic m2 ~f ~fv in
         Logic.Ops.(m1 = m2)
+      | R.R_Real m1, R.R_Real m2 ->
+	let m1 = C.map_non_atomic m1 ~f ~fv
+	and m2 = C.map_non_atomic m2 ~f ~fv in
+	Logic.Ops.(m1 =. m2)
       | R.R_Bool b1, R.R_Bool b2 ->
         let b1 = C.map_non_atomic b1 ~f ~fv
         and b2 = C.map_non_atomic b2 ~f ~fv in
@@ -374,6 +446,14 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
       | A.A_Eq s, _, _ ->
         Formula.F_Atom
           (Logic.A.A_Eq
+             (C.map_non_atomic s ~f:(purify_atom x) ~fv))
+      | A.A_EqR s, _, _ ->
+	Formula.F_Atom
+          (Logic.A.A_EqR
+             (C.map_non_atomic s ~f:(purify_atom x) ~fv))
+      | A.A_LeR s, _, _ ->
+        Formula.F_Atom
+          (Logic.A.A_LeR
              (C.map_non_atomic s ~f:(purify_atom x) ~fv))
 
   and purify_formula x ~polarity =
@@ -450,5 +530,8 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
 
   let deref_bool {r_ctx} i =
     S'.deref_bool r_ctx i
+
+  let deref_real {r_ctx} i =
+    S'.deref_real r_ctx i
 
 end

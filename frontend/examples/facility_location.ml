@@ -96,16 +96,18 @@ constrain
 constrain
   (~logicr
     (forall locations
-      ~f:(fun l -> sumr cities ~f:(fun c -> (production c l)) <=. roi(Int63.of_int(capacity.(l.l_id)) * (build l)))));;
+      ~f:(fun l -> sumr cities ~f:(fun c -> (production c l)) <=. to_real(Int63.of_int(capacity.(l.l_id)) * (build l)))));;
   
 
 (* Objective Function *)
-maximize_real
-(  ~logicr(
+minimize_real
+(  ~logicr(~-.(
     (sumr cities ~f:(fun c -> 
            (sumr locations ~f:(fun l -> (profit.(c.c_id).(l.l_id) *. (production c l))))))
- -. (sumr locations  ~f:(fun l -> roi(((Int63.of_int(opening_cost.(l.l_id))) * (build l))))))
+ -. (sumr locations  ~f:(fun l -> to_real(((Int63.of_int(opening_cost.(l.l_id))) * (build l)))))))
 );;
+
+solve();;
 
 
 (* Printing Solution *)

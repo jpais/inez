@@ -58,5 +58,8 @@ with compare, sexp
 type ('i, 'b) ibeither  =  H_Int of 'i | H_Bool of 'b
 with compare, sexp
 
+type ('i, 'r) ireither = W_Int of 'i | W_Real of 'r
+with compare, sexp
+
 type ('i, 'r, 'b) irbeither = D_Int of 'i | D_Real of 'r | D_Bool of 'b
 with compare, sexp

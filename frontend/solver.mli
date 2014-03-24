@@ -9,5 +9,6 @@ sig
            with type c := c
            and type carg := S.ctx
            and type ivar := S.ivar
-           and type bvar := S.bvar)
+           and type bvar := S.bvar
+	   and type rvar := S.rvar)
 end

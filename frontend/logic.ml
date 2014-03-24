@@ -319,11 +319,11 @@ module Ops = struct
 
   let rite c a b = M.M_RIte (c, a, b)
 
-  let (<.) a b = Formula.F_Atom (A_LeF (M.(a +. (M_Real Float.(1.0)) -. b)))
+  let (<.) a b = Formula.F_Atom (A_LeR (M.(a +. (M_Real Float.(1.0)) -. b)))
 
-  let (<=.) a b = Formula.F_Atom (A_LeF M.(a -. b))
+  let (<=.) a b = Formula.F_Atom (A_LeR M.(a -. b))
 
-  let (=.) a b = Formula.F_Atom (A_EqF M.(a -. b))
+  let (=.) a b = Formula.F_Atom (A_EqR M.(a -. b))
 
   let (>=.) a b = b <=. a
 

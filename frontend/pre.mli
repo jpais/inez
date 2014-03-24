@@ -31,7 +31,7 @@ module Make : functor (I : Id.Accessors) -> sig
              | G_Base  of  term_base
 	     | G_Sum   of  sum Terminology.offset
 	     | G_SumM  of  suml Terminology.roffset
-        (* | G_SumF  of  sumf Terminology.roffset *)
+       
 	    
 
   and bite = formula * formula * formula
@@ -47,7 +47,6 @@ module Make : functor (I : Id.Accessors) -> sig
   with compare
 
   val hashable_sum : sum Core.Std.Hashtbl.Hashable.t
-  (*val hashable_rsum : sumf Core.Std.Hashtbl.Hashable.t*)
   val hashable_suml : suml Core.Std.Hashtbl.Hashable.t
   val hashable_args : args Core.Std.Hashtbl.Hashable.t
   val hashable_iite : iite Core.Std.Hashtbl.Hashable.t

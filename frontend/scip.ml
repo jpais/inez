@@ -37,6 +37,8 @@ let ivar_of_bvar x = x
 (* TODO : check bounds *)
 let bvar_of_ivar x = x
 
+let rvar_of_ivar x = x 
+
 type named_constraint = cons
 
 let string_of_retcode = function
@@ -136,21 +138,23 @@ let make_ctx () =
 
 let new_f _ id _ = id
 
-let scip_lb {r_ctx} =
+let scip_lb_int {r_ctx} =
   Option.value_map
     ~default:(~-. (sCIPinfinity r_ctx))
     ~f:Int63.to_float
 
-let scip_ub {r_ctx} =
+let scip_ub_int {r_ctx} =
   Option.value_map
     ~default:(sCIPinfinity r_ctx)
     ~f:Int63.to_float
 
-let scip_lb_float {r_ctx} =
-  Option.value ~default:(~-. (sCIPinfinity r_ctx))
+let scip_lb_real {r_ctx} =
+  Option.value
+    ~default:(~-. (sCIPinfinity r_ctx))
 
-let scip_ub_float {r_ctx} =
-  Option.value ~default:(sCIPinfinity r_ctx)
+let scip_ub_real {r_ctx} =
+  Option.value 
+    ~default:(sCIPinfinity r_ctx)
 
 let new_ivar ({r_ctx; r_var_d} as r) t =
   let i = Dequeue.length r_var_d in
@@ -160,11 +164,11 @@ let new_ivar ({r_ctx; r_var_d} as r) t =
       (match t with
       | T_Int (lb, ub) ->
         sCIPcreateVarBasic
-          r_ctx id (scip_lb r lb) (scip_ub r ub)
+          r_ctx id (scip_lb_int r lb) (scip_ub_int r ub)
           0. SCIP_VARTYPE_INTEGER
       | T_Real (lb, ub) ->
         sCIPcreateVarBasic
-          r_ctx id (scip_lb_float r lb) (scip_ub_float r ub)
+          r_ctx id (scip_lb_real r lb) (scip_ub_real r ub)
           0. SCIP_VARTYPE_CONTINUOUS) in
   assert_ok _here_ (sCIPaddVar r_ctx v);
   Dequeue.enqueue_back r_var_d v; v
@@ -177,6 +181,28 @@ let new_bvar {r_ctx; r_var_d} =
       (sCIPcreateVarBasic r_ctx id 0.0 1.0 0. SCIP_VARTYPE_BINARY) in
   assert_ok _here_ (sCIPaddVar r_ctx v);
   Dequeue.enqueue_back r_var_d v; v
+
+let new_ivar' ({r_ctx; r_var_d} as r) lb ub =
+  let i = Dequeue.length r_var_d in
+  let id = Printf.sprintf "v%d" i in
+  let v =
+    assert_ok1 _here_
+      (sCIPcreateVarBasic
+          r_ctx id (scip_lb_int r lb) (scip_ub_int r ub)
+          0. SCIP_VARTYPE_INTEGER) in
+  assert_ok _here_ (sCIPaddVar r_ctx v);
+  Dequeue.enqueue_back r_var_d v;v
+
+let new_rvar ({r_ctx; r_var_d} as r) lb ub =
+   let i = Dequeue.length r_var_d in
+  let id = Printf.sprintf "v%d" i in
+  let v =
+    assert_ok1 _here_ 
+      ( sCIPcreateVarBasic
+          r_ctx id (scip_lb_real r lb) (scip_ub_real r ub)
+          0. SCIP_VARTYPE_CONTINUOUS ) in
+  assert_ok _here_ (sCIPaddVar r_ctx v);
+  Dequeue.enqueue_back r_var_d v;v
 
 let negate_bvar {r_ctx; r_var_d} v =
   let v = assert_ok1 _here_ (sCIPgetNegatedVar r_ctx v) in
@@ -394,6 +420,23 @@ let add_cut_local ({r_ctx} as r) (l, o) =
   assert_ok _here_ (sCIPflushRowExtensions r_ctx row) ;
   assert_ok _here_ (sCIPaddCut r_ctx (scip_null_sol ()) row true)
 
+let add_real_cut_local ({r_ctx} as r) (l, o) =
+  let row =
+    assert_ok1 _here_
+      (sCIPcreateEmptyRowCons r_ctx
+         (sCIPfindConshdlr r_ctx "cc")
+         (make_cut_id r)
+         (-. (sCIPinfinity r_ctx)) o
+         true false false) in
+  assert_ok _here_ (sCIPcacheRowExtensions r_ctx row);
+  assert (not (List.is_empty l));
+  List.iter l
+    ~f:(fun (c, v) ->
+      assert_ok _here_
+        (sCIPaddVarToRow r_ctx row v c));
+  assert_ok _here_ (sCIPflushRowExtensions r_ctx row) ;
+  assert_ok _here_ (sCIPaddCut r_ctx (scip_null_sol ()) row true)
+
 (* FIXME : do we really need the Option? *)
 
 let name_diff {r_cch} v1 v2 =
@@ -403,14 +446,19 @@ module Types = struct
   type ctx = scip_ctx
   type ivar = var
   type bvar = var
+  type rvar = var
   let compare_ivar = compare_var
   let hash_ivar = hash_var
   let sexp_of_ivar = sexp_of_var
   let compare_bvar = compare_var
   let hash_bvar = hash_var
   let sexp_of_bvar = sexp_of_var
+  let compare_rvar = compare_var
+  let hash_rvar = hash_var
+  let sexp_of_rvar = sexp_of_var
   let ivar_of_bvar = ivar_of_bvar
   let bvar_of_ivar = bvar_of_ivar
+  let rvar_of_ivar = rvar_of_ivar
 end
 
 module Types_uf = struct
@@ -424,8 +472,9 @@ end
 module Access = struct
   let new_f = new_f
   let new_ivar = new_ivar
+  let new_ivar' = new_ivar'
   let new_bvar = new_bvar
-  let new_rvar = new_ivar
+  let new_rvar = new_rvar
   let negate_bvar = negate_bvar
   let add_eq = add_eq
   let add_real_eq = add_real_eq
@@ -459,12 +508,26 @@ module Dp_access_bounds = struct
     else
       Some (Int63.of_float lb)
 
+  let get_real_lb_local {r_ctx} v = 
+    let lb = sCIPvarGetLbLocal v in
+    if sCIPisEQ r_ctx lb (-. (sCIPinfinity r_ctx)) then
+      None
+    else
+      (Some lb)
+
   let get_ub_local {r_ctx} v =
     let ub = sCIPvarGetUbLocal v in
     if sCIPisEQ r_ctx ub (sCIPinfinity r_ctx) then
       None
     else
       Some (Int63.of_float ub)
+
+  let get_real_ub_local {r_ctx} v = 
+    let ub = sCIPvarGetUbLocal v in
+    if sCIPisEQ r_ctx ub (-. (sCIPinfinity r_ctx)) then
+      None
+    else
+      (Some ub)
 
   let bderef_local r v =
     Option.(get_lb_local r v >>| Int63.((<=) one))
@@ -473,6 +536,17 @@ module Dp_access_bounds = struct
     let infeasible, tightened =
       let cons = scip_null_cons ()
       and x = Int63.to_float x in
+      assert_ok2 _here_ (sCIPinferVarLbCons r_ctx v x cons 0 true) in
+    if infeasible then
+      `Infeasible
+    else if tightened then
+      `Tightened
+    else
+      `Ok
+
+let set_real_lb_local {r_ctx} v x =
+    let infeasible, tightened =
+      let cons = scip_null_cons () in
       assert_ok2 _here_ (sCIPinferVarLbCons r_ctx v x cons 0 true) in
     if infeasible then
       `Infeasible
@@ -493,9 +567,22 @@ module Dp_access_bounds = struct
     else
       `Ok
 
+ let set_real_ub_local {r_ctx} v x =
+    let infeasible, tightened =
+      let cons = scip_null_cons () in
+      assert_ok2 _here_ (sCIPinferVarUbCons r_ctx v x cons 0 true) in
+    if infeasible then
+      `Infeasible
+    else if tightened then
+      `Tightened
+    else
+      `Ok
+
   let ideref_sol = ideref_sol
 
   let bderef_sol = bderef_sol
+
+  let rderef_sol = rderef_sol
 
 end
 
@@ -504,6 +591,8 @@ module Dp_access = struct
   include Dp_access_bounds
 
   let ibranch = branch
+
+  let rbranch = branch
 
   let ibranch_nary {r_ctx} v ~middle ~n ~width =
     let r, n = sCIPbranchVarValNary r_ctx v middle n width 1. in
@@ -516,6 +605,9 @@ module Dp_access = struct
     | _ ->
       `Fail
 
+  let rbranch_nary = ibranch_nary
+
+
   let bbranch r v = branch r v 0.5
 
 end
@@ -526,15 +618,25 @@ module Dvars =
     let name_diff = name_diff
   end)
 
+module Drvars =
+  Drvars.Make (struct
+    include Dp_access_bounds
+    let name_real_diff = name_diff
+  end)
+
 module Cut_gen_access = struct
 
   include Dp_access_bounds
 
   module Dvars = Dvars
 
+  module Drvars = Drvars
+
   (* type dvar = Dvars.t *)
 
   let add_cut_local = add_cut_local
+
+  let add_real_cut_local = add_real_cut_local
 
   let rderef_sol = rderef_sol
 
@@ -556,7 +658,8 @@ module Scip_with_dp = struct
 
     (D : Imt_intf.S_dp
      with type ivar_plug := ivar
-     and type bvar_plug := bvar) =
+     and type bvar_plug := bvar
+     and type rvar_plug := rvar) =
 
   struct
 
@@ -618,6 +721,8 @@ module Scip_with_dp = struct
 
     let register_bvar = register_var
 
+    let register_rvar = register_var
+
   end
 
 end
@@ -633,12 +738,16 @@ module Scip_with_cut_gen = struct
 
   module Dvars = Dvars
 
+  module Drvars = Drvars
+
   module F
 
     (D : Imt_intf.S_cut_gen
      with type ivar_plug := ivar
      and type bvar_plug := bvar
-     and type dvar_plug := Dvars.t) =
+     and type rvar_plug := rvar
+     and type dvar_int_plug := Dvars.t
+     and type dvar_real_plug := Drvars.t) =
 
   struct
 
@@ -655,6 +764,8 @@ module Scip_with_cut_gen = struct
     let register_ivar = register_var
 
     let register_bvar = register_var
+
+    let register_rvar = register_var
 
     let make_cut_gen d_ctx ctx =
       make_cut_Gen (object
@@ -703,6 +814,8 @@ module Scip_with_cut_gen = struct
       rval
 
     let create_dvar = Dvars.create_dvar
+
+    let create_real_dvar = Drvars.create_real_dvar
     
   end
 

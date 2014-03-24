@@ -75,8 +75,8 @@ module type Atom = sig
   type 'i t =
   | A_Bool  of  ('i, bool)  term_plug
   | A_Le    of  ('i, int)   term_plug
-  | A_LeF   of  ('i, float) term_plug
+  | A_LeR   of  ('i, float) term_plug
   | A_Eq    of  ('i, int)   term_plug
-  | A_EqF   of  ('i, float) term_plug
+  | A_EqR   of  ('i, float) term_plug
 
 end

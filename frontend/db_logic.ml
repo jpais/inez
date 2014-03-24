@@ -7,6 +7,7 @@ module S : Schema = struct
   type _ t =
   | S_Int   :  int t
   | S_Bool  :  bool t
+  | S_Real  :  float t
   | S_Pair  :  'a t * 'b t -> ('a * 'b) t
 
 end
@@ -29,6 +30,8 @@ struct
     ('i, int) t
   | R_Bool  :  ('i, bool) M.t ->
     ('i, bool) t
+  | R_Real  :  ('i, float) M.t ->
+    ('i, float) t
   | R_Pair  :  ('i, 'r) t * ('i, 's) t ->
     ('i, 'r * 's) t
 
@@ -57,6 +60,35 @@ struct
     let open Option in
     of_list s l >>= function r, [] -> Some r | _ -> None
 
+
+  let rec of_list' :
+  type s . s S.t ->
+    (('i, int) M.t, ('i, float) M.t, 'i A.t Formula.t) irbeither list ->
+    (('i, s) R.t *
+        (('i, int) M.t, ('i, float) M.t, 'i A.t Formula.t) irbeither list) option =
+    fun s l ->
+      match s, l with
+      | S.S_Int, D_Int x :: d ->
+        Some (R_Int x, d)
+      | S.S_Real, D_Real x :: d ->
+	Some (R_Real x, d)
+      | S.S_Bool, D_Bool (Formula.F_Atom (A.A_Bool x)) :: d ->
+        Some (R_Bool x, d)
+      | S.S_Bool, D_Bool x :: d ->
+        Some (R_Bool (M.M_Bool x), d)
+      | S.S_Pair (s1, s2), l ->
+        let open Option in
+        of_list' s1 l >>= (fun (x, l) ->
+          of_list' s2 l >>| (fun (y, l) ->
+            R_Pair (x, y), l))
+      | _ ->
+        None
+
+let of_list' s l =
+    let open Option in
+    of_list' s l >>= function r, [] -> Some r | _ -> None
+
+
   (* TODO : tail recursive *)
   let rec to_list :
   type s . ('i, s) t ->
@@ -68,6 +100,22 @@ struct
       [H_Bool (Formula.F_Atom (A.A_Bool m))]
     | R_Pair (m1, m2) ->
       List.append (to_list m1) (to_list m2)
+    | R_Real _ -> raise (Failure "Case not considered in ibeither. This function will be replaced by to_list'")
+
+  let rec to_list' :
+  type s . ('i, s) t ->
+    (('i, int) M.t, ('i, float) M.t, 'i A.t Formula.t) irbeither list =
+    function
+    | R_Int m ->
+      [D_Int m]
+    | R_Real m ->
+      [D_Real m]
+    | R_Bool m ->
+      [D_Bool (Formula.F_Atom (A.A_Bool m))]
+    | R_Pair (m1, m2) ->
+      List.append (to_list' m1) (to_list' m2)
+
+
 
 end
 

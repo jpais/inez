@@ -22,23 +22,10 @@ let minimize m =
   | `Out_of_fragment ->
     raise (Invalid_argument "minimize: term out of fragment")
 
-let maximize m = 
- match S.add_objective ctx (Db_logic.M.(~- m)) with
-    |`Ok -> 
-      ()
-    | `Duplicate ->
-      raise (Invalid_argument "The problem already has an objective.")
-    | `Out_of_fragment ->
-      raise (Invalid_argument "Maximize: term out of fragment")
-
 let minimize_real o = () (* TODO: Add body to the function or merge with minimize *)
-
-let maximize_real o = () (* TODO: Add body to the function or merge with maximize *)
 
 let solve () =
   S.solve ctx
-
-let solve_real () = Terminology.R_Unknown (* TODO: Add body to the function or merge with solve *)
 
 let fresh_int_var () =
   Db_logic.M.M_Var (Id'.gen_id Type.Y_Int)
@@ -68,6 +55,9 @@ let rderef = function
     None
   | _ ->
     None
+
+let to_real x = 
+  raise (Failure "TODO: Real numbers not supported yet")
 
 let toi x =
   Db_logic.M.M_Int (Core.Std.Int63.of_int x)

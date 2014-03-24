@@ -3,6 +3,7 @@ module type Schema = sig
   type _ t =
   | S_Int   :  int t
   | S_Bool  :  bool t
+  | S_Real  :  float t
   | S_Pair  :  'a t * 'b t -> ('a * 'b) t
 
 end
@@ -16,6 +17,8 @@ module type Row = sig
     ('i, int) t
   | R_Bool  :  ('i, bool) m ->
     ('i, bool) t
+  | R_Real  :  ('i, float) m ->
+    ('i, float) t
   | R_Pair  :  ('i, 'r) t * ('i, 's) t ->
     ('i, 'r * 's) t
 
@@ -37,6 +40,15 @@ module type Row_with_ops = sig
   val to_list :
     ('i, 's) t ->
     (('i, int) m, 'i a Formula.t) Terminology.ibeither list
+
+  val of_list' :
+    'u s ->
+    (('i, int) m, ('i, float) m, 'i a Formula.t) Terminology.irbeither list ->
+    ('i, 'u) t option
+
+  val to_list' :
+    ('i, 's) t ->
+    (('i, int) m, ('i, float) m, 'i a Formula.t) Terminology.irbeither list
 
 end
 
@@ -84,5 +96,7 @@ module type Atom = sig
   | A_Bool    of  ('i, bool) m
   | A_Le      of  ('i, int) m
   | A_Eq      of  ('i, int) m
-
+  | A_EqR     of ('i, float) m
+  | A_LeR     of ('i, float) m
+ 
 end

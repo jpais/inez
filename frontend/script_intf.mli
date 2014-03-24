@@ -13,10 +13,6 @@ module type S = sig
 
   val minimize_real : (c, float) term_plug -> unit
 
-  val maximize : (c, int) term_plug -> unit
-
-  val maximize_real : (c, float) term_plug -> unit
-
   val solve : unit -> Terminology.result
 
   val fresh_int_var : unit -> (c, int) term_plug
@@ -32,6 +28,8 @@ module type S = sig
   val rderef : (c, float) term_plug -> Core.Std.Float.t option
 
   val toi : int -> (c, int) term_plug
+
+  val to_real :  (c, int) term_plug ->  (c, float) term_plug
 
   val gen_id : 's Type.t -> (c, 's) Id.t
 

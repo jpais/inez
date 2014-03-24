@@ -28,28 +28,13 @@ struct
 
   *)
 
+  (** Integer variables *)
+
   let hashable_ivar = {
     Hashtbl.Hashable.
     hash = Hashtbl.hash;
     compare = S.compare_ivar;
     sexp_of_t = S.sexp_of_ivar
-  }
-
-  let hashable_bvar = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = S.compare_bvar;
-    sexp_of_t = S.sexp_of_bvar
-  }
- 
-  type fid = I.c Id.Box_arrow.t
-  with compare, sexp_of
-
-  let hashable_fid = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_fid;
-    sexp_of_t = sexp_of_fid
   }
 
   type iid  = (I.c, int) Id.t
@@ -62,6 +47,28 @@ struct
     sexp_of_t = sexp_of_iid
   }
 
+  type ovar = S.ivar option offset
+  with compare, sexp_of
+
+  type bg_isum = S.ivar isum
+  with compare, sexp_of
+
+  let hashable_bg_isum = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash; 
+    compare = compare_bg_isum;
+    sexp_of_t = sexp_of_bg_isum;
+  }
+
+(** Boolean variables*)
+
+  let hashable_bvar = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = S.compare_bvar;
+    sexp_of_t = S.sexp_of_bvar
+  }
+ 
   type bid = (I.c, bool) Id.t
   with compare, sexp_of
 
@@ -72,7 +79,18 @@ struct
     sexp_of_t = sexp_of_bid
   }
 
-(*Added type for real variables *)
+  type xvar = S.bvar option signed
+  with compare, sexp_of
+
+(** Real variables *)
+
+  let hashable_rvar = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = S.compare_rvar;
+    sexp_of_t = S.sexp_of_rvar
+  }
+
   type rid = (I.c, float) Id.t
   with compare, sexp_of
 
@@ -83,11 +101,33 @@ struct
     sexp_of_t = sexp_of_rid
   }
 
-  type ovar = S.ivar option offset
+  type orvar = S.rvar option roffset
   with compare, sexp_of
 
-  type rovar = S.ivar option roffset
+  type bg_rsum = S.rvar rsum
   with compare, sexp_of
+
+  let hashable_bg_rsum = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_bg_rsum;
+    sexp_of_t = sexp_of_bg_rsum
+  }
+
+(** Mixed Int/Real *)
+
+  type movar = (S.ivar, S.rvar) ireither option roffset
+
+(** Functions *)
+  type fid = I.c Id.Box_arrow.t
+  with compare, sexp_of
+
+  let hashable_fid = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_fid;
+    sexp_of_t = sexp_of_fid
+  }
     
   type bg_call = S.f * ovar list
   with compare, sexp_of
@@ -107,26 +147,10 @@ struct
     sexp_of_t = sexp_of_bg_call;
   }
 
-  type bg_isum = S.ivar isum
-  with compare, sexp_of
+ 
 
-  let hashable_bg_isum = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash; 
-    compare = compare_bg_isum;
-    sexp_of_t = sexp_of_bg_isum;
-  }
-
-(* Added: list of float * rvar *)
-  type bg_rsum = S.ivar rsum
-  with compare, sexp_of
-
-  let hashable_bg_rsum = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_bg_rsum;
-    sexp_of_t = sexp_of_bg_rsum
-  }
+ 
+ 
 
   let type_of_term :
   type t . t term -> t Type.t =
@@ -134,11 +158,6 @@ struct
 
   let flat_sum_negate (l, x) =
     List.map l ~f:(Tuple2.map1 ~f:Int63.neg), Int63.neg x
-
-  (* optional var, possibly negated (S_Pos None means true) *)
-
-  type xvar = S.bvar option signed
-  with compare, sexp_of
 
   let xtrue = S_Pos None
 
@@ -159,19 +178,19 @@ struct
     r_pre_ctx          :  P.ctx;
     r_ivar_m           :  (iid, S.ivar) Hashtbl.t;
     r_bvar_m           :  (bid, S.bvar) Hashtbl.t;
-    r_rvar_m           :  (rid, S.ivar) Hashtbl.t;   (*Added*)
+    r_rvar_m           :  (rid, S.rvar) Hashtbl.t;   
     r_iid_m            :  (S.ivar, iid) Hashtbl.t;
     r_bid_m            :  (S.bvar, bid) Hashtbl.t;
-    r_rid_m            :  (S.ivar, rid) Hashtbl.t;   (*Added*)
+    r_rid_m            :  (S.rvar, rid) Hashtbl.t;   
     r_xvar_m           :  (P.formula, xvar) Hashtbl.t;
     r_fun_m            :  (fid, S.f) Hashtbl.t;
     r_call_m           :  (bg_call, S.ivar) Hashtbl.t;
     r_sum_m            :  (P.sum, S.ivar iexpr) Hashtbl.t;
     r_msum_m           :  (P.suml, S.ivar rexpr) Hashtbl.t;   (*Added*)
     r_var_of_sum_m     :  (bg_isum, S.ivar) Hashtbl.t;      
-    r_rvar_of_rsum_m   :  (bg_rsum, S.ivar) Hashtbl.t;  (*Added*)
+    r_rvar_of_rsum_m   :  (bg_rsum, S.rvar) Hashtbl.t;  (*Added*)
     r_ovar_of_iite_m   :  (P.iite, ovar) Hashtbl.t;
-    r_rovar_of_iite_m  :  (P.iite, rovar) Hashtbl.t;   (*Added*)
+    r_orvar_of_iite_m  :  (P.iite, orvar) Hashtbl.t;   (*Added*)
     r_q                :  P.formula Dequeue.t;
     mutable r_obj      :  P.term option;
     mutable r_fun_cnt  :  int;
@@ -192,7 +211,7 @@ struct
     r_bid_m =
       Hashtbl.create ()  ~size:10240  ~hashable:hashable_bvar;
     r_rid_m =
-      Hashtbl.create ()  ~size:10240  ~hashable:hashable_ivar;
+      Hashtbl.create ()  ~size:10240  ~hashable:hashable_rvar;
     r_xvar_m  =
       Hashtbl.create ()  ~size:10240  ~hashable:P.hashable_formula;
     r_fun_m   =
@@ -209,7 +228,7 @@ struct
       Hashtbl.create ()  ~size:2048   ~hashable:hashable_bg_rsum; 
     r_ovar_of_iite_m =
       Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_iite;
-    r_rovar_of_iite_m =
+    r_orvar_of_iite_m =
       Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_iite;
     r_q       =
       Dequeue.create () ~initial_length:63;
@@ -236,7 +255,7 @@ struct
   let rvar_of_rid {r_ctx; r_rvar_m; r_rid_m} x =
     Hashtbl.find_or_add r_rvar_m x
       ~default:(fun () ->
-	let v = S.new_ivar r_ctx mip_type_real in       
+	let v = S.new_rvar r_ctx None None in       
 	Hashtbl.replace r_rid_m v x; v)
 
    let bvar_of_bid {r_ctx; r_bvar_m; r_bid_m} x =
@@ -306,17 +325,6 @@ struct
     l, Float.(o' + o)
       
 
- (* and iexpr_of_flat_term r = function
-    | P.G_Sum s ->
-      iexpr_of_sum r s
-    | P.G_Base b ->
-      (match ovar_of_flat_term_base r b with
-      | Some v, x ->
-        [Int63.one, v], x
-      | None, x ->
-        [], x)
-    | P.G_SumM s -> raise (Unreachable.Exn _here_)
- *)
   and iexpr_of_flat_term r = function
     | P.G_SumM s -> let l, o = iexpr_of_sum_mixed r s in
 		    (J_RSum l), o
@@ -408,7 +416,7 @@ struct
         Some v, Int63.zero in
     Hashtbl.find_or_add r_ovar_of_iite_m i ~default
 
-  and ovar_of_ite_mixed ({r_ctx; r_rovar_of_iite_m} as r) ((g,s,t) as i) = 
+  and ovar_of_ite_mixed ({r_ctx; r_orvar_of_iite_m} as r) ((g,s,t) as i) = 
     let default () =
       match xvar_of_formula_doit r g with
       | S_Pos None ->
@@ -425,7 +433,7 @@ struct
         blast_ite_branch r (S_Neg bv) v s;
         blast_ite_branch r (S_Pos bv) v t;
         Some v, Float.zero in
-    Hashtbl.find_or_add r_rovar_of_iite_m i ~default
+    Hashtbl.find_or_add r_orvar_of_iite_m i ~default
 
   and ovar_of_flat_term_base r = function
     | P.B_IVar v ->
@@ -698,6 +706,11 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
   let ovar_of_term ({r_pre_ctx} as r) m =
     let m = P.flatten_int_term r_pre_ctx m in
     lazy (ovar_of_term r m)
+
+  let ovar_of_term_mixed ({r_pre_ctx} as r) m =
+    let m = P.flatten_mixed_term r_pre_ctx m in
+    lazy (ovar_of_term_mixed r m)
+
 
   let bvar_of_id = bvar_of_bid
 
