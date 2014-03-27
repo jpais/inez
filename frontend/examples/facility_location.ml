@@ -125,7 +125,8 @@ let exp_prod city location =
 let print_production () =
   List.iter locations ~f:(fun l ->
     if (ideref (build l) = (Some Int63.one))
-    then( List.iter cities ~f:(fun c ->
+    then( printf "Location %d:    " l.l_id;
+	  List.iter cities ~f:(fun c ->
           (match rderef (production c l) with
 	     | Some x -> printf "%f" x
 	     | None -> raise (Failure "Error while reading the variable"));

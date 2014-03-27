@@ -156,10 +156,6 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
   }
 
  
-
- 
- 
-
   let type_of_term :
   type t . t term -> t Type.t =
     fun x -> M.type_of_t ~f:I.type_of_t' x
@@ -194,7 +190,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     r_fun_m            :  (fid, S.f) Hashtbl.t;
     r_call_m           :  (bg_call, S.ivar) Hashtbl.t;
     r_sum_m            :  (P.sum, S.ivar iexpr) Hashtbl.t;
-    r_msum_m           :  (P.suml, mvar rexpr) Hashtbl.t;   (*Added*)
+    r_msum_m           :  (P.mixed_sum, mvar rexpr) Hashtbl.t;   (*Added*)
     r_var_of_sum_m     :  (bg_isum, S.ivar) Hashtbl.t;      
     r_rvar_of_rsum_m   :  (bg_msum, mvar) Hashtbl.t;  (*Added*)
     r_ovar_of_iite_m   :  (P.iite, ovar) Hashtbl.t;
@@ -229,7 +225,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     r_sum_m =
       Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_sum;
     r_msum_m =
-      Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_suml; 
+      Hashtbl.create ()  ~size:2048   ~hashable:P.hashable_mixed_sum; 
     r_var_of_sum_m =
       Hashtbl.create ()  ~size:2048   ~hashable:hashable_bg_isum;
     r_rvar_of_rsum_m =
@@ -285,10 +281,10 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     | S_Pos x -> S_Neg x
     | S_Neg x -> S_Pos x
 
-  let negate_isum =
-    List.map ~f:(Tuple2.map1 ~f:Int63.neg)
+(*  let negate_isum =
+    List.map ~f:(Tuple2.map1 ~f:Int63.neg) *)
 
-  let negate_rsum = function
+  let negate_sum = function
     | LP_Int s -> LP_Int (List.map ~f:(Tuple2.map1 ~f:Int63.neg) s)
     | LP_Mix s -> LP_Mix (List.map ~f:(Tuple2.map1 ~f:(Float.neg)) s)
 
@@ -351,7 +347,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     and o' = Int63.to_float o
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
     S.add_real_indicator r_ctx (S_Pos v) l' (Float.neg o');
-    S.add_real_indicator r_ctx (S_Neg v) (negate_rsum l') Float.(o' - 1.0);
+    S.add_real_indicator r_ctx (S_Neg v) (negate_sum l') Float.(o' - 1.0);
     S_Pos (Some v)
  
   and blast_le_mixed ?v ({r_ctx} as r) s =
@@ -359,7 +355,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     let l' = (LP_Mix l)
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
     S.add_real_indicator r_ctx (S_Pos v) l' (Float.neg o);
-    S.add_real_indicator r_ctx (S_Neg v) (negate_rsum l') Float.(o - 1.0);
+    S.add_real_indicator r_ctx (S_Neg v) (negate_sum l') Float.(o - 1.0);
     S_Pos (Some v)
   
 
@@ -374,7 +370,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     blast_eq_aux r_ctx l' (Int63.to_float o)
 
   and blast_eq_aux r_ctx l o =
-    let l_neg = negate_rsum l in
+    let l_neg = negate_sum l in
     let b = S.new_bvar r_ctx in
     let b_lt = S_Pos (S.new_bvar r_ctx)
     and b_gt = S_Pos (S.new_bvar r_ctx)
@@ -408,7 +404,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
               | LP_Int s -> LP_Int ((Int63.minus_one, v) :: s)
               | LP_Mix s -> raise (Failure "blast_ite_branch: Only for ILP cases")) in
     S.add_real_indicator r_ctx xv  l'                (Float.neg o);
-    S.add_real_indicator r_ctx xv  (negate_rsum l')  o
+    S.add_real_indicator r_ctx xv  (negate_sum l')  o
 
   and mixed_blast_ite_branch ({r_ctx} as r) xv v e =
     let l, o = iexpr_of_flat_term r e in
@@ -416,7 +412,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
               | LP_Int s -> raise (Failure "mixed_blast_ite_branch: Only for MILP cases")
               | LP_Mix s -> LP_Mix ((Float.(-1.0), v) :: s)) in
     S.add_real_indicator r_ctx xv l' (Float.neg o);
-    S.add_real_indicator r_ctx xv (negate_rsum l') o
+    S.add_real_indicator r_ctx xv (negate_sum l') o
 
   and ovar_of_ite ({r_ctx; r_ovar_of_iite_m} as r) ((g, s, t) as i) =
     let default () =
@@ -426,12 +422,12 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
       | S_Neg None ->
         ovar_of_term r t
       | S_Pos (Some bv) ->
-        let v = S.new_ivar r_ctx mip_type_int in
+        let v = (S.new_ivar r_ctx mip_type_int) in
         blast_ite_branch r (S_Pos bv) v s;
         blast_ite_branch r (S_Neg bv) v t;
         Some v, Int63.zero
       | S_Neg (Some bv) ->
-        let v = S.new_ivar r_ctx mip_type_int in
+        let v = (S.new_ivar r_ctx mip_type_int) in
         blast_ite_branch r (S_Neg bv) v s;
         blast_ite_branch r (S_Pos bv) v t;
         Some v, Int63.zero in
@@ -594,12 +590,26 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       blast_le r ([Int63.one, t], Int63.zero)
     | P.G_Sum s, O'_Le ->
       blast_le r s
+    | P.G_Sum s, O'_MLe -> 
+      raise (Failure "blast_atom O'_RLe: Invalid case for ILP")
+    | P.G_Base t, O'_MLe ->
+      blast_le_mixed r ([P.S_Real(Float.(1.0), t)], Float.zero)
     | P.G_Base t, O'_Eq ->
       blast_eq r ([Int63.one, t], Int63.zero)
     | P.G_Sum s, O'_Eq ->
       blast_eq r s
-    | P.G_SumM s, O'_Le -> blast_le_mixed r s
-    | P.G_SumM s, O'_Eq -> blast_eq_mixed r s 
+    | P.G_Sum s, O'_MEq ->
+      raise (Failure "blast_atom O'_RLe: Invalid case for ILP")
+    | P.G_Base t, O'_MEq ->
+      blast_eq_mixed r ([P.S_Real(Float.(1.0), t)], Float.zero)
+    | P.G_SumM s, O'_Le -> 
+      blast_le_mixed r s
+    | P.G_SumM s, O'_Eq -> 
+      blast_eq_mixed r s 
+    | P.G_SumM s, O'_MLe -> 
+      blast_le_mixed r s
+    | P.G_SumM s, O'_MEq -> 
+      blast_eq_mixed r s
 
   and blast_conjunction_map r acc = function
     | g :: tail ->
@@ -668,6 +678,12 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     let v = S.ivar_of_bvar v in
     S.add_eq r_ctx [Int63.one, v] c
 
+  let assert_mvar_equal_constant {r_ctx} v c =
+    S.add_real_eq r_ctx (LP_Mix [Float.(1.0), v]) c
+
+  let assert_mvar_le_constant {r_ctx} v c =
+    S.add_real_le r_ctx (LP_Mix [Float.(1.0), v]) c
+
   let finally_assert_unit ({r_ctx} as r) = function
     | S_Pos (Some v) ->
       assert_bvar_equal_constant r v Int63.one
@@ -692,6 +708,12 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | P.U_Atom (P.G_Sum s, O'_Eq) ->
       let l, o = iexpr_of_sum r s in
       S.add_eq r_ctx l (Int63.neg o)
+    | P.U_Atom (P.G_SumM s, O'_MLe) ->
+      let l, o = iexpr_of_sum_mixed r s in
+      S.add_real_le r_ctx (LP_Mix l) (Float.neg o)
+    |P.U_Atom (P.G_SumM s, O'_MEq) ->
+      let l,o = iexpr_of_sum_mixed r s in
+      S.add_real_eq r_ctx (LP_Mix l) (Float.neg o)
     | P.U_Atom (P.G_Base a, O'_Le) ->
       (match ovar_of_flat_term_base r a with
       | None, o when Int63.(o > zero) ->
@@ -708,6 +730,22 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
         r.r_unsat <- true
       | Some v, o ->
         assert_ivar_equal_constant r v (Int63.neg o))
+    | P.U_Atom (P.G_Base a, O'_MEq) ->
+      (match ovar_of_flat_term_base_mixed r a with
+	| None, o when Float.(o = zero) ->
+	  ()
+	| None, _ ->
+	  r.r_unsat <- true
+	| Some v, o ->
+	  assert_mvar_equal_constant r v (Float.neg o))
+    | P.U_Atom (P.G_Base a, O'_MLe) ->
+      (match ovar_of_flat_term_base_mixed r a with
+	| None, o when Float.(o > zero) ->
+	  r.r_unsat <- true
+	| None, _ ->
+	  ()
+	| Some v, o -> 
+	  assert_mvar_le_constant r v (Float.neg o))
     | g ->
       finally_assert_unit r (xvar_of_formula_doit r g)
 
@@ -721,8 +759,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     let g = P.flatten_formula r_pre_ctx g in
     lazy (xvar_of_formula_doit r g)
 
- 
-  let xvar_of_term ({r_pre_ctx} as r) m =
+   let xvar_of_term ({r_pre_ctx} as r) m =
     let g = P.flatten_bool_term r_pre_ctx m in
     lazy (xvar_of_formula_doit r g)
 
@@ -733,7 +770,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
   let ovar_of_term_mixed ({r_pre_ctx} as r) m =
     let m = P.flatten_mixed_term r_pre_ctx m in
     lazy (ovar_of_term_mixed r m)
-
 
   let bvar_of_id = bvar_of_bid
 

@@ -36,7 +36,7 @@ module Make (I : Id.Accessors) = struct
   and sumt =
     Int63.t * term_base
 
-  and summ = 
+  and mixed_sumt = 
      | S_Int of Int63.t * term_base
      | S_Real of Float.t * term_base
    
@@ -44,8 +44,8 @@ module Make (I : Id.Accessors) = struct
   and sum =
     sumt list
 
-  and suml =
-    summ list
+  and mixed_sum =
+    mixed_sumt list
 
   and iite =
     formula * term * term
@@ -60,7 +60,7 @@ module Make (I : Id.Accessors) = struct
   and term =
   | G_Base   of  term_base
   | G_Sum    of  sum  Terminology.offset 
-  | G_SumM   of  suml Terminology.roffset
+  | G_SumM   of  mixed_sum Terminology.roffset
   
 
   and bite = formula * formula * formula
@@ -88,11 +88,11 @@ module Make (I : Id.Accessors) = struct
     sexp_of_t = sexp_of_sum
   }
 
-  let hashable_suml = {
+  let hashable_mixed_sum = {
     Hashtbl.Hashable.
-    compare = compare_suml;
+    compare = compare_mixed_sum;
     hash = Hashtbl.hash;
-    sexp_of_t = sexp_of_suml
+    sexp_of_t = sexp_of_mixed_sum
   }
 
   let hashable_args = {
@@ -142,12 +142,12 @@ module Make (I : Id.Accessors) = struct
        single sub{term,formula} is shared, but we don't have to go
        very deep before we find shared parts. *)
 
-    s_sum_h    :  (sum, sum) Hashtbl.t;
-    s_suml_h   :  (suml, suml) Hashtbl.t;   (* mixed int/float type*)
-    s_args_h   :  (args, args) Hashtbl.t;
-    s_iite_h   :  (iite, term_base) Hashtbl.t;
-    s_bite_h   :  (bite, formula) Hashtbl.t;
-    s_conj_h   :  (conj, formula) Hashtbl.t;
+    s_sum_h         :  (sum, sum) Hashtbl.t;
+    s_mixed_sum_h   :  (mixed_sum, mixed_sum) Hashtbl.t;   (* mixed int/float type*)
+    s_args_h        :  (args, args) Hashtbl.t;
+    s_iite_h        :  (iite, term_base) Hashtbl.t;
+    s_bite_h        :  (bite, formula) Hashtbl.t;
+    s_conj_h        :  (conj, formula) Hashtbl.t;
   
   }
 
@@ -157,7 +157,7 @@ module Make (I : Id.Accessors) = struct
        the same terms/formulas multiple times. *)
 
     r_imemo_h  :  ((I.c, int) M.t, term) Hashtbl.Poly.t;
-    r_rmemo_h :  ((I.c, float) M.t, term) Hashtbl.Poly.t;
+    r_rmemo_h  :  ((I.c, float) M.t, term) Hashtbl.Poly.t;
     r_bmemo_h  :  ((I.c, bool) M.t, formula) Hashtbl.Poly.t;
     r_fmemo_h  :  (I.c A.t Formula.t, formula) Hashtbl.Poly.t;
 
@@ -166,12 +166,12 @@ module Make (I : Id.Accessors) = struct
   }
 
   let make_sharing_ctx () = {
-    s_sum_h   = Hashtbl.create () ~size:2048 ~hashable:hashable_sum;
-    s_suml_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_suml;
-    s_args_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_args;
-    s_iite_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_iite;
-    s_bite_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_bite;
-    s_conj_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_conj;
+    s_sum_h        = Hashtbl.create () ~size:2048 ~hashable:hashable_sum;
+    s_mixed_sum_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_mixed_sum;
+    s_args_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_args;
+    s_iite_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_iite;
+    s_bite_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_bite;
+    s_conj_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_conj;
   }
 
   let make_ctx () = {
@@ -247,7 +247,7 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
 			 if dif = 0
 			 then (Float.to_int(Float.(c' - (Int63.to_float c))))
 			 else dif
-		       | _, _ -> compare_summ t t' in
+		       | _, _ -> compare_mixed_sumt t t' in
     let l = List.sort ~cmp:comp l in
     let rec loop ~acc = function
       | [] -> acc
@@ -286,9 +286,9 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     let l = dedup_sum l in
     Hashtbl.find_or_add s_sum_h l ~default:(fun () -> l), o
 
-  let make_mixed_sum {r_sharing = {s_suml_h}} l ro = 
+  let make_mixed_sum {r_sharing = {s_mixed_sum_h}} l ro = 
     let l = dedup_mixed_sum l in
-    Hashtbl.find_or_add s_suml_h l ~default:(fun()->l), ro
+    Hashtbl.find_or_add s_mixed_sum_h l ~default:(fun()->l), ro
  
   let make_args {r_sharing = {s_args_h}} l =
     Hashtbl.find_or_add s_args_h l ~default:(fun () -> l)
@@ -380,7 +380,7 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
 	(Float.neg(ro))
     | G_SumM (s, ro), G_SumM (s', ro') ->
       Option.some_if
-	(compare_suml s s' = 0)
+	(compare_mixed_sum s s' = 0)
 	(Float.(ro - ro'))
     | _ -> None
 
@@ -528,7 +528,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
         (k, make_iite r c s t) :: d, x)
 
 
-  and flatten_mixed_term_aux ({r_sharing={s_suml_h}} as r) = function
+  and flatten_mixed_term_aux ({r_sharing={s_mixed_sum_h}} as r) = function
     | M.M_Var v ->
       G_Base (B_RVar v)
     | M.M_ROI x -> flatten_int_term r x 
@@ -668,11 +668,11 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | Formula.F_Atom (A.A_Le t) ->
       U_Atom (flatten_int_term r t, O'_Le)
     | Formula.F_Atom (A.A_LeR t) ->
-      U_Atom (flatten_mixed_term r t, O'_Le)
+      U_Atom (flatten_mixed_term r t, O'_MLe)
     | Formula.F_Atom (A.A_Eq t) ->
       U_Atom (flatten_int_term r t, O'_Eq)
     | Formula.F_Atom (A.A_EqR t) ->
-      U_Atom (flatten_mixed_term r t, O'_Eq) 
+      U_Atom (flatten_mixed_term r t, O'_MEq) 
     | Formula.F_Not g ->
       negate (flatten_formula r g)
     | Formula.F_Ite (q, g, h) ->

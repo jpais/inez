@@ -260,6 +260,12 @@ let add_le ({r_ctx} as r) l o =
   let c = create_constraint r false l (Int63.to_float o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
+let add_real_le ({r_ctx} as r) l o =
+  let c = (match l with
+            | LP_Int s -> create_constraint r false s o
+	    | LP_Mix s -> create_real_constraint r false s o) in
+  assert_ok _here_ (sCIPaddCons r_ctx c)
+
 let var_of_var_signed {r_ctx} = function
   | S_Pos v ->
     v
@@ -490,12 +496,13 @@ module Access = struct
   let add_eq = add_eq
   let add_real_eq = add_real_eq
   let add_le = add_le
+  let add_real_le = add_real_le
   let add_indicator = add_indicator
-  let add_real_indicator = add_real_indicator (* Added *)
+  let add_real_indicator = add_real_indicator
   let add_clause = add_clause
   let add_call = add_call
   let add_objective = add_objective
-  let add_real_objective = add_real_objective (* Added *)
+  let add_real_objective = add_real_objective
   let solve = solve
   let ideref = ideref
   let bderef = bderef

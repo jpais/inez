@@ -105,6 +105,8 @@ module type S_access = sig
   (** [add_le ctx i rhs] asserts i <= rhs *) 
   val add_le : ctx -> ivar isum -> Int63.t -> unit
 
+  val add_real_le : ctx -> (ivar, rvar) lp_type -> Float.t -> unit
+
   (** [add_indicator ctx v i] asserts v => (i <= rhs) *) 
   val add_indicator :
     ctx -> bvar signed -> ivar isum -> Int63.t -> unit

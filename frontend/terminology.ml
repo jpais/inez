@@ -9,7 +9,7 @@ type 't ternop          =  't -> 't -> 't -> 't
 type op                 =  O_Lt | O_Le | O_Eq | O_Ge | O_Gt
 with compare, sexp
 
-type op'                =  O'_Le | O'_Eq
+type op'                =  O'_Le | O'_Eq | O'_MLe | O'_MEq
 with compare, sexp
 
 type 'v monomial        =  Core.Std.Int63.t * 'v

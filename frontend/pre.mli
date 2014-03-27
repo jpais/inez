@@ -10,13 +10,12 @@ module Make : functor (I : Id.Accessors) -> sig
 
   and sumt = Core.Std.Int63.t * term_base
 
-  and summ = private
-	     | S_Int of Core.Std.Int63.t * term_base
-	     | S_Real of Core.Std.Float.t * term_base
+  and mixed_sumt =   S_Int of Core.Std.Int63.t * term_base
+		    | S_Real of Core.Std.Float.t * term_base
 
   and sum = sumt list
 
-  and suml = summ list
+  and mixed_sum = mixed_sumt list
 
   and iite = formula * term * term
 
@@ -30,7 +29,7 @@ module Make : functor (I : Id.Accessors) -> sig
   and term = private
              | G_Base  of  term_base
 	     | G_Sum   of  sum Terminology.offset
-	     | G_SumM  of  suml Terminology.roffset
+	     | G_SumM  of  mixed_sum Terminology.roffset
        
 	    
 
@@ -46,12 +45,12 @@ module Make : functor (I : Id.Accessors) -> sig
 
   with compare
 
-  val hashable_sum : sum Core.Std.Hashtbl.Hashable.t
-  val hashable_suml : suml Core.Std.Hashtbl.Hashable.t
-  val hashable_args : args Core.Std.Hashtbl.Hashable.t
-  val hashable_iite : iite Core.Std.Hashtbl.Hashable.t
-  val hashable_bite : bite Core.Std.Hashtbl.Hashable.t
-  val hashable_formula : formula Core.Std.Hashtbl.Hashable.t
+  val hashable_sum       : sum Core.Std.Hashtbl.Hashable.t
+  val hashable_mixed_sum : mixed_sum Core.Std.Hashtbl.Hashable.t
+  val hashable_args      : args Core.Std.Hashtbl.Hashable.t
+  val hashable_iite      : iite Core.Std.Hashtbl.Hashable.t
+  val hashable_bite      : bite Core.Std.Hashtbl.Hashable.t
+  val hashable_formula   : formula Core.Std.Hashtbl.Hashable.t
 
   type ctx
 
