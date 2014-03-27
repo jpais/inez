@@ -3,7 +3,7 @@ open Terminology
 
 module type S_ivar = sig
 
-  (** integer/real variable *)
+  (** integer variable *)
   type ivar
 
   val compare_ivar : ivar -> ivar -> int
@@ -29,6 +29,7 @@ end
 
 module type S_rvar = sig
 
+  (** Real variable *)
   type rvar
 
   val compare_rvar : rvar -> rvar -> int
@@ -99,7 +100,7 @@ module type S_access = sig
   (** [add_eq ctx i rhs] asserts i = rhs *) 
   val add_eq : ctx -> ivar isum -> Int63.t -> unit
 
-  val add_real_eq : ctx -> ivar  rsum -> Float.t -> unit
+  val add_real_eq : ctx -> (ivar, rvar) lp_type -> Float.t -> unit
 
   (** [add_le ctx i rhs] asserts i <= rhs *) 
   val add_le : ctx -> ivar isum -> Int63.t -> unit
@@ -110,7 +111,7 @@ module type S_access = sig
 
   (** [add_real_indicator ctx v r] asserts v => (i <= rhs) *)
   val add_real_indicator :
-    ctx -> bvar signed -> ivar mip_sum -> Float.t -> unit
+    ctx -> bvar signed -> (ivar, rvar) lp_type -> Float.t -> unit
 
   (** [add_clause ctx l] asserts l (viewed as a clause) *)
   val add_clause : ctx -> bvar signed list -> unit
@@ -122,7 +123,7 @@ module type S_access = sig
 
   val add_objective : ctx -> ivar isum -> [ `Duplicate | `Ok ]
 
-  val add_real_objective : ctx -> ivar mip_sum -> [ `Duplicate | `Ok ]
+  val add_real_objective : ctx -> (ivar, rvar) lp_type -> [ `Duplicate | `Ok ]
 
   val solve : ctx -> result
 

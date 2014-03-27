@@ -224,16 +224,20 @@ let create_constraint ({r_ctx} as r) eq l o =
        (Array.of_list_map ~f:(Fn.compose Int63.to_float fst) l)
        (-.
            (if eq then
-               Int63.(to_float (neg o))
+               Float.(neg o)
             else
                sCIPinfinity r_ctx))
-       (Int63.to_float o))
+        o)
 
 let create_real_constraint ({r_ctx} as r) eq l o =
   assert_ok1 _here_
     (sCIPcreateConsBasicLinear r_ctx
        (make_constraint_id r)
-       (Array.of_list_map ~f:snd l)
+       (Array.of_list_map ~f:(
+	 fun x -> (match (snd x) with
+	            | W_Int x -> x
+		    | W_Real x -> x)) 
+	l)
        (Array.of_list_map ~f:fst l)
        (-.
 	   (if eq then 
@@ -243,15 +247,17 @@ let create_real_constraint ({r_ctx} as r) eq l o =
        Float.(o))
 
 let add_eq ({r_ctx} as r) l o =
-  let c = create_constraint r true l o in
+  let c = create_constraint r true l (Int63.to_float o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_real_eq ({r_ctx} as r) l o = 
-  let c = create_real_constraint r true l o in
+  let c = (match l with
+            | LP_Int s -> create_constraint r true s o
+	    | LP_Mix s -> create_real_constraint r true s o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_le ({r_ctx} as r) l o =
-  let c = create_constraint r false l o in
+  let c = create_constraint r false l (Int63.to_float o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let var_of_var_signed {r_ctx} = function
@@ -273,11 +279,15 @@ let add_indicator ({r_ctx} as r) v l o =
 
 let add_real_indicator ({r_ctx} as r) v l o =
   let variables, coeffs = match l with
-    | J_ISum s -> 
+    | LP_Int s -> 
       Array.of_list_map ~f:snd s, 
       Array.of_list_map ~f:(Fn.compose Int63.to_float fst) s
-    | J_RSum s -> 
-      Array.of_list_map ~f:snd s, Array.of_list_map ~f:fst s in
+    | LP_Mix s -> 
+      Array.of_list_map ~f:(fun x ->
+	(match (snd x) with
+	  | W_Int c -> c
+	  | W_Real c -> c)) s,
+      Array.of_list_map ~f:fst s in
   let c =
     assert_ok1 _here_
       (sCIPcreateConsBasicIndicator r_ctx
@@ -324,14 +334,15 @@ let add_real_objective {r_ctx; r_has_objective} l =
   if r_has_objective then
     `Duplicate
   else match l with
-        | J_ISum s -> (List.iter s
+        | LP_Int s -> (List.iter s
                         ~f:(fun (c, v) ->
                              let c = Int63.to_float c in
                              assert_ok _here_ (sCIPchgVarObj r_ctx v c));
                       `Ok)
-	| J_RSum s ->  (List.iter s
+	| LP_Mix s ->  (List.iter s
 			  ~f:(fun (c, v) ->
-			    assert_ok _here_ (sCIPchgVarObj r_ctx v c));
+			    let x = (match v with | W_Int x -> x | W_Real x -> x) in
+			    assert_ok _here_ (sCIPchgVarObj r_ctx x c));
 			`Ok)
 
 let result_of_status = function

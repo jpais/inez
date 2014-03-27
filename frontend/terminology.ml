@@ -30,8 +30,12 @@ with compare, sexp
 type 'v rsum            =  'v rmonomial list
 with compare, sexp
 
-type 'v mip_sum         =   J_ISum of 'v isum
-			  | J_RSum of 'v rsum
+type ('i, 'r) ireither = W_Int of 'i | W_Real of 'r
+with compare, sexp
+
+(** Represents the type of linear program. J_Int is a pure integer program and J_Mix a mixed program*)
+type ('i,'r) lp_type      =   LP_Int of 'i isum
+			    | LP_Mix of ('i,'r) ireither rsum
 with compare, sexp
 
 type 'v iexpr           =  'v isum offset
@@ -40,9 +44,8 @@ with compare, sexp
 type 'v rexpr            =  'v rsum roffset
 with compare, sexp
 
-type mip_type           =  T_Int of (Core.Std.Int63.t option *
-                                       Core.Std.Int63.t option)
-                           | T_Real of float option * float option
+type mip_type           =    T_Int  of (Core.Std.Int63.t option *  Core.Std.Int63.t option)
+                           | T_Real of (Core.Std.Float.t option *  Core.Std.Float.t option)
 with compare, sexp
 
 type result             =  R_Opt | R_Unbounded | R_Sat
@@ -56,9 +59,6 @@ type 't signed          =  S_Pos of 't | S_Neg of 't
 with compare, sexp
 
 type ('i, 'b) ibeither  =  H_Int of 'i | H_Bool of 'b
-with compare, sexp
-
-type ('i, 'r) ireither = W_Int of 'i | W_Real of 'r
 with compare, sexp
 
 type ('i, 'r, 'b) irbeither = D_Int of 'i | D_Real of 'r | D_Bool of 'b

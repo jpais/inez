@@ -42,11 +42,15 @@ module type S_with_holes = sig
 
   type rvar
 
+  type mvar
+
   val negate_bvar : ctx -> bvar -> bvar
 
   type ovar = ivar option Terminology.offset
 
-  type rovar = ivar option Terminology.roffset
+  type rovar = rvar option Terminology.roffset
+
+  type movar = mvar option Terminology.roffset
 
   val compare_ovar : ovar -> ovar -> int
 
@@ -72,7 +76,7 @@ module type S_with_holes = sig
     ctx -> (c, int) Logic.M.t -> ovar Lazy.t
 
   val ovar_of_term_mixed :
-    ctx -> (c, float) Logic.M.t -> rovar Lazy.t
+    ctx -> (c, float) Logic.M.t -> movar Lazy.t
 
   val bvar_of_id :
     ctx -> (c, bool) Id.t -> bvar
