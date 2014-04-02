@@ -51,7 +51,7 @@ let bderef = function
 
 let rderef = function
   | Db_logic.M.M_Var v ->
-    None
+    S.deref_real ctx v
   | _ ->
     None
 

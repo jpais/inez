@@ -101,10 +101,10 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     sexp_of_t = Imt.sexp_of_bvar
   }
 
-  type row = Imt.ivar option offset array
-  with compare, sexp_of
 
-  type mixed_row = (Imt.ivar, Imt.rvar) Terminology.ireither option roffset array
+(** Pure Int DB*)
+
+  type row = Imt.ivar option offset array
   with compare, sexp_of
 
   type db = row list
@@ -115,16 +115,6 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     hash = Hashtbl.hash;
     compare = compare_db;
     sexp_of_t = sexp_of_db
-  }
-
-  type mixed_db = mixed_row list
-  with compare, sexp_of
-
-  let hashable_mixed_db = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash;
-    compare = compare_mixed_db;
-    sexp_of_t = sexp_of_mixed_db
   }
 
   type idiff = Imt.ivar * Imt.ivar
@@ -138,9 +128,6 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   }
 
   type row_map = row list Int63.Map.t
-  with compare, sexp_of
-
-  type mixed_row_map = mixed_row list Int63.Map.t
   with compare, sexp_of
 
   type index = row_map * row_map * row list
@@ -165,6 +152,77 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type mbounds_value =
     bounds_array * row Zom.t * bool
 
+
+(** Mixed Int/Real DB *)
+
+(** Represents a row of a DB table. The row is an array of ivars and rvars*)
+  type mixed_row = (Imt.ivar, Imt.rvar) Terminology.ireither option offset array
+  with compare, sexp_of
+
+(** Represents a table*)
+  type mixed_db = mixed_row list
+  with compare, sexp_of
+
+  let hashable_mixed_db = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_mixed_db;
+    sexp_of_t = sexp_of_mixed_db
+  }
+
+(** A variable that represents the difference between 2 ivars or 2 rvars
+  type mixed_diff = (Imt.ivar * Imt.ivar, Imt.rvar * Imt.rvar) Terminology.ireither 
+  with compare, sexp_of
+*)
+  type mixed_diff = ((Imt.ivar,Imt.rvar) ireither * (Imt.ivar,Imt.rvar) ireither)
+  with compare, sexp_of
+
+
+
+  let hashable_mixed_diff = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_mixed_diff;
+    sexp_of_t = sexp_of_mixed_diff
+  }
+
+(** Index over the table. Each i represents a list of mixed rows whose first column element i *)
+  type mixed_row_map = mixed_row list Int63.Map.t
+  with compare, sexp_of
+
+(** Represents a partitin of the table as follows:
+- the first map consists of rows that only have constants (no variables)
+- second map consists of rows whose first element is a constant but have a variable somewhere
+- list of rows that begin with a variable*)
+  type mixed_index = mixed_row_map * mixed_row_map * mixed_row list
+  with compare, sexp_of
+
+(** Represents the constrains:
+- First row is the symbolic row whose membership we are testing.
+- The index represents the table where we are testing the membership.
+- int represents the column of the table that is being indexed (default 0).
+- int option ref: if not None, then the constrain is satisfied at level n of the search tree. The objective is to stop branching and propagation.*)
+  type mixed_occ = mixed_row * mixed_index * int * int option ref
+  with compare, sexp_of
+
+  type mixed_bounds_array = (Float.t option * Float.t option) array
+  with compare, sexp_of
+
+(** Bounds for a constant only partition of the table*)
+  type mixed_bounds_key = mixed_bounds_array * mixed_row_map
+  with compare, sexp_of
+
+   let hashable_mixed_bounds_key = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_mixed_bounds_key;
+    sexp_of_t = sexp_of_mixed_bounds_key
+  }
+
+(** Symbolic expression * number of candidates * true iff already has an equal candidate*)
+  type mixed_bounds_value = mixed_bounds_array * mixed_row Zom.t * bool
+
+
   type stats = {
     mutable s_propagate     :  int;
     mutable s_check         :  int;
@@ -178,10 +236,14 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 
   type ctx = {
     r_idb_h          :  (db, index) Hashtbl.t;
+    r_mdb_h          :  (mixed_db, mixed_index) Hashtbl.t;
     r_bvar_d         :  Imt.bvar Dequeue.t;
     r_diff_h         :  (idiff, Imt.ivar) Hashtbl.t;
+    r_mdiff_h        :  (mixed_diff, (Imt.ivar, Imt.rvar) Terminology.ireither) Hashtbl.t;
     r_occ_h          :  (Imt.bvar, occ Dequeue.t) Hashtbl.t;
+    r_mocc_h         :  (Imt.bvar, mixed_occ Dequeue.t) Hashtbl.t;
     r_mbounds_h      :  (mbounds_key, mbounds_value) Hashtbl.t;
+    r_mixbounds_h    :  (mixed_bounds_key, mixed_bounds_value) Hashtbl.t;
     r_stats          :  stats;
     mutable r_level  :  int;
   }
@@ -189,14 +251,22 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   let make_ctx () = {
     r_idb_h =
       Hashtbl.create () ~size:64 ~hashable:hashable_db;
+    r_mdb_h =
+      Hashtbl.create () ~size:64 ~hashable:hashable_mixed_db;
     r_bvar_d =
       Dequeue.create () ~initial_length:31;
     r_diff_h =
       Hashtbl.create () ~size:1024 ~hashable:hashable_idiff;
+    r_mdiff_h = 
+      Hashtbl.create () ~size:1024 ~hashable:hashable_mixed_diff;
     r_occ_h =
+      Hashtbl.create () ~size:1024 ~hashable:hashable_bvar;
+    r_mocc_h =
       Hashtbl.create () ~size:1024 ~hashable:hashable_bvar;
     r_mbounds_h =
       Hashtbl.create () ~size:255 ~hashable:hashable_mbounds_key;
+    r_mixbounds_h =
+      Hashtbl.create () ~size:255 ~hashable:hashable_mixed_bounds_key;
     r_stats = {
       s_propagate = 0;
       s_check = 0;
@@ -233,6 +303,10 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     let default () = index_of_db_dimension d i in
     Hashtbl.find_or_add r_idb_h d ~default
 
+  let index_of_mdb {r_mdb_h} d i =
+    let default () = index_of_db_dimension d i in
+    Hashtbl.find_or_add r_mdb_h d ~default
+
   let bvar_in_dequeue d v =
     let f x = Imt.compare_bvar x v = 0 in
     Dequeue.exists d ~f
@@ -248,6 +322,30 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         fd v1 v2 in
       Some (Hashtbl.find_or_add r_diff_h (v1, v2) ~default)
 
+  let rec var_of_mdiff ({r_mdiff_h} as r) v1 v2 ~fd ~frv =
+    match v1, v2 with
+      | W_Int x, W_Int y ->
+	if Imt.compare_ivar x y > 0 then
+	  var_of_mdiff r v2 v1 ~fd ~frv
+	else if Imt.compare_ivar x y = 0 then
+	  None
+	else
+	  let default () =
+            assert (Imt.compare_ivar x y < 0);
+            ((fd v1 v2)) in
+	  Some (Hashtbl.find_or_add r_mdiff_h (v1, v2) ~default)
+      | W_Real x, W_Real y ->
+	if Imt.compare_rvar x y > 0 then
+	  var_of_mdiff r v2 v1 ~fd ~frv
+	else if Imt.compare_rvar x y = 0 then
+	  None
+	else let default () = 
+	   assert (Imt.compare_rvar x y < 0);
+	   ((fd v1 v2)) in
+	 Some (Hashtbl.find_or_add r_mdiff_h (v1, v2) ~default)
+      | _, _ -> None
+      
+
   let register_diffs r row1 row2 ~fd ~frv =
     Array.iter2_exn row1 row2
       ~f:(fun (v1, _) (v2, _) ->
@@ -260,6 +358,23 @@ module Make (Imt : Imt_intf.S_essentials) = struct
           frv v
         | None, None ->
           ())
+
+  let register_mdiffs r row1 row2 ~fd ~frv = 
+    Array.iter2_exn row1 row2
+      ~f:(fun (v1, _) (v2, _) ->
+	match v1, v2 with
+	  | Some (W_Int x1), Some (W_Int x2) when not (Imt.compare_ivar x1 x2 = 0) ->
+	    let v = var_of_mdiff r (W_Int x1) (W_Int x2) ~fd ~frv in
+	    let v = Option.value_exn v ~here:_here_ in
+	    frv v
+	  | Some (W_Real x1), Some (W_Real x2) when not (Imt.compare_rvar x1 x2 = 0) ->
+	    let v = var_of_mdiff r (W_Real x1) (W_Real x2) ~fd ~frv in
+	    let v = Option.value_exn v ~here:_here_ in
+	    frv v
+	  | Some v, _ | _, Some v ->
+	    frv v
+	  | None, None ->
+	    ())
 
   let assert_membership
       ({r_bvar_d; r_occ_h} as r) b e l ~fd ~frv =
@@ -276,6 +391,21 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       Hashtbl.find_or_add r_occ_h b ~default in
     Dequeue.enqueue_front d occ
 
+  let assert_mixed_membership
+      ({r_bvar_d; r_mocc_h} as r) b e l ~fd ~frv =
+    let e = Array.of_list e
+    and l = List.map l ~f:Array.of_list in
+    List.iter l ~f:(register_mdiffs r e ~fd ~frv);
+    let index = index_of_mdb r l 0 in
+    if not (bvar_in_dequeue r_bvar_d b) then
+      Dequeue.enqueue_front r_bvar_d b;
+    let mocc = e, index, 0, ref None in
+    let d =
+      let initial_length = 64 and never_shrink = false in
+      let default = Dequeue.create ~initial_length ~never_shrink in
+      Hashtbl.find_or_add r_mocc_h b ~default in
+    Dequeue.enqueue_front d mocc
+
   module F
 
     (S : Imt_intf.S_dp_access
@@ -291,6 +421,13 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 
     type 'a mapped = row -> bounds:bounds_array -> 'a
 
+(** Mixed types *)
+    type 'a mixed_folded = mixed_row -> bounds:mixed_bounds_array -> acc:'a -> 'a
+
+    type 'a mixed_folded_no_bounds = mixed_row -> acc:'a -> 'a
+
+    type 'a mixed_mapped = mixed_row -> bounds:mixed_bounds_array -> 'a
+
     let lb_of_ovar r' = function
       | Some v, o ->
         Option.(S.get_lb_local r' v >>| Int63.(+) o)
@@ -303,8 +440,28 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | None, o ->
         Some o
 
+    let lb_of_movar r' = function
+      | Some (W_Real v), o -> 
+	Option.(S.get_real_lb_local r' v >>| Float.(+) o)
+      | Some (W_Int v), o ->
+	Option.(S.get_lb_local r' v >>| (fun x -> Float.((Int63.to_float x) + o )))
+      | None, o ->
+	Some o
+
+    let ub_of_movar r' = function
+      | Some (W_Real v), o -> 
+	Option.(S.get_real_ub_local r' v >>| Float.(+) o)
+      | Some (W_Int v), o ->
+	Option.(S.get_ub_local r' v >>| (fun x -> Float.((Int63.to_float x) + o )))
+      | None, o ->
+	Some o
+
     let bounds_of_row r' =
       let f ov = lb_of_ovar r' ov, ub_of_ovar r' ov in
+      Array.map ~f
+
+    let bounds_of_mixed_row r' =
+      let f ov = lb_of_movar r' ov, ub_of_movar r' ov in
       Array.map ~f
 
     let bounds_within_for_dim (lb, ub) (lb', ub') =
@@ -324,6 +481,17 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         let open Option in
         Hashtbl.find r_diff_h (v2, v1) >>=
           S.get_ub_local r' >>| Int63.neg
+
+	      
+    let lb_of_mdiff {r_mdiff_h} r' v1 v2 =
+      match v1, v2 with
+	| W_Int x1, W_Int x2 ->
+	  if Imt.compare_ivar x1 x2 = 0 then
+	    Some Float.zero
+	  else if Imt.compare_ivar x1 x2 < 0 then
+	    let open Option in 
+	    Hashtbl.find r_mdiff_h (v1, v2) >>= S.get_
+
 
     let ub_of_diff {r_diff_h} r' v1 v2 =
       if Imt.compare_ivar v1 v2 = 0 then
