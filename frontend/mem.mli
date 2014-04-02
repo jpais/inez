@@ -2,7 +2,8 @@ module Make (Imt : Imt_intf.S_essentials) : sig
 
   include (Imt_intf.S_dp
            with type ivar_plug := Imt.ivar
-           and type bvar_plug := Imt.bvar)
+           and type bvar_plug := Imt.bvar
+	   and type rvar_plug := Imt.rvar)
 
   val print_stats : ctx -> unit
 

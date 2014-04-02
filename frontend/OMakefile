@@ -253,7 +253,7 @@ MyOCamlProgram(inez-smt, terminology unreachable dvars scip_idl scip	\
                smtlib_parser smtlib_solver smtlib_main, native_utils	\
                scip_idl_stubs)
 
-OCamlTop(inez-db, terminology unreachable dvars scip_idl scip util	\
+OCamlTop(inez-db, terminology unreachable dvars drvars scip_idl scip util	\
          formula type id logic db_logic camlp4_maps pa_db_logic pre	\
          solver bounds smtlib_printer mem db_solver db_script,		\
          native_utils scip_idl_stubs)

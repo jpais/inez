@@ -20,7 +20,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
 
 (*Added*)
   type irbentry =       
-      (S'.ovar Lazy.t, S'.rovar Lazy.t, S'.xvar Lazy.t) irbeither
+      (S'.ovar Lazy.t, S'.movar Lazy.t, S'.xvar Lazy.t) irbeither
 
   type table_lazy = S'.ovar list list Lazy.t
 
@@ -324,7 +324,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
 	    D_Int m :: acc
 	  | R.R_Real m ->
 	    let m = C.map_non_atomic m ~f ~fv in
-	    let m = S'.ovar_of_term_mixed r_ctx m in
+	    let m = S'.ovar_of_term_mixed r_ctx m in  
 	    D_Real m :: acc
 	  | R.R_Bool m ->
             let m = C.map_non_atomic m ~f ~fv in

@@ -104,6 +104,9 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type row = Imt.ivar option offset array
   with compare, sexp_of
 
+  type mixed_row = (Imt.ivar, Imt.rvar) Terminology.ireither option roffset array
+  with compare, sexp_of
+
   type db = row list
   with compare, sexp_of
 
@@ -112,6 +115,16 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     hash = Hashtbl.hash;
     compare = compare_db;
     sexp_of_t = sexp_of_db
+  }
+
+  type mixed_db = mixed_row list
+  with compare, sexp_of
+
+  let hashable_mixed_db = {
+    Hashtbl.Hashable.
+    hash = Hashtbl.hash;
+    compare = compare_mixed_db;
+    sexp_of_t = sexp_of_mixed_db
   }
 
   type idiff = Imt.ivar * Imt.ivar
@@ -125,6 +138,9 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   }
 
   type row_map = row list Int63.Map.t
+  with compare, sexp_of
+
+  type mixed_row_map = mixed_row list Int63.Map.t
   with compare, sexp_of
 
   type index = row_map * row_map * row list
@@ -264,7 +280,8 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 
     (S : Imt_intf.S_dp_access
      with type ivar := Imt.ivar
-     and type bvar := Imt.bvar) =
+     and type bvar := Imt.bvar
+     and type rvar := Imt.rvar) =
 
   struct
 

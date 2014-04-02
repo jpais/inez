@@ -119,6 +119,18 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
   type bg_msum = mvar rsum
   with compare, sexp_of
 
+  let get_rovar m =
+    match m with
+      | (Some (W_Real x), o) -> (Some x, o)
+      | (Some (W_Int x), o) -> (None, o)
+      | None, o -> None, o
+
+  let get_iovar m =
+    match m with
+      | (Some (W_Real x), o) -> (None, o)
+      | (Some (W_Int x), o) -> (Some x, o)
+      | None, o -> None, o
+
   let hashable_bg_msum = {
     Hashtbl.Hashable.
     hash = Hashtbl.hash;
