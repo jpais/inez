@@ -788,6 +788,48 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       and key = a, m in
       let r = Hashtbl.find_or_add r_mbounds_h key ~default in
       Tuple3.map1 r ~f:Array.copy
+
+   
+
+(** These functions extract a minimun/maximum given an iroption. For the cases None, the just returnmax/min value. Check if it's ok for the float case to return an integer. I understand that this won't affect the mapping but check again *)
+  let extract_min (lb:iroption) =
+      match lb with
+	| SInt x -> x
+	| SReal x -> Int63.of_int (Float.iround_down_exn x)
+	| NInt | NReal -> Int63.min_value
+
+    let extract_max (ub:iroption) = 
+      match ub with
+	| SInt x -> x
+	| SReal x -> Int63.of_int (Float.iround_down_exn x)
+	| NInt | NReal -> Int63.max_value 
+
+  let fold_mixed_constant_candidates
+        ({r_stats; r_mixbounds_h} as r)
+        (r' : S.ctx)
+	(row : mixed_row) 
+	(m : mixed_row_map) 
+	(i : int)
+        ~init ~(f : 'a mixed_folded) =
+      r_stats.s_mbounds_all <- r_stats.s_mbounds_all + 1;
+      let a = bounds_of_mixed_row r' row in
+      let default () =
+        r_stats.s_mbounds_fail <- r_stats.s_mbounds_fail + 1;
+        let f acc data =
+          let bounds = bounds_of_mixed_row r' data  in
+          if maybe_equal_mixed_rows r r' data bounds row a then
+            f data ~bounds ~acc
+          else
+            acc in
+        let f ~key ~data init = List.fold_left data ~init ~f
+        and min, max = a.(i) in
+        let min = extract_min min
+        and max = extract_max max in
+        Map.fold_range_inclusive m ~min ~max ~init ~f
+      and key = a, m in
+      let r = Hashtbl.find_or_add r_mixbounds_h key ~default in
+      Tuple3.map1 r ~f:Array.copy
+
     
     let fold_candidates_map r r' row m i ~init ~(f : 'a folded) =
       let a = bounds_of_row r' row in
@@ -801,6 +843,27 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       and min, max = a.(i) in
       let min = Option.value min ~default:Int63.min_value
       and max = Option.value max ~default:Int63.max_value in
+      Map.fold_range_inclusive m ~min ~max ~init ~f
+
+ let fold_candidates_mixed_map
+     (r : ctx)
+     (r':S.ctx)
+     (row : mixed_row)
+     (m : mixed_row_map)
+     (i : int)
+     ~init 
+     ~(f : 'a mixed_folded) =
+      let a = bounds_of_mixed_row r' row in
+      let f acc data =
+        let bounds = bounds_of_mixed_row r' data  in
+        if maybe_equal_mixed_rows r r' data bounds row a then
+          f data ~bounds ~acc
+        else
+          acc in
+      let f ~key ~data init = List.fold_left data ~init ~f
+      and min, max = a.(i) in
+      let min = extract_min min
+      and max = extract_max max in
       Map.fold_range_inclusive m ~min ~max ~init ~f
 
     let exists_candidate
@@ -821,6 +884,25 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         Map.fold_range_inclusive m1 ~min ~max ~init ~f ||
           Map.fold_range_inclusive m2 ~min ~max ~init ~f
 
+    let exists_mixed_candidate
+        r r' (row, (m1, m2, l), i, _) ~(f : bool mixed_mapped) =
+      let a = bounds_of_mixed_row r' row in
+      let f data =
+        let bounds = bounds_of_mixed_row r' data  in
+        maybe_equal_mixed_rows r r' data bounds row a &&
+          f data ~bounds in
+      let f ~key ~data acc = acc || List.exists data ~f
+      and init = List.exists l ~f in
+      init ||
+        let min = lb_of_movar r' row.(i)
+        and max = ub_of_movar r' row.(i) in
+        let min = extract_min min
+        and max = extract_max max in
+        let init = false in
+        Map.fold_range_inclusive m1 ~min ~max ~init ~f ||
+          Map.fold_range_inclusive m2 ~min ~max ~init ~f
+
+
     let response_of_attempts a b =
       match a, b with
       | `Infeasible, _ | _, `Infeasible ->
@@ -839,6 +921,25 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | Some ub, None ->
         if Int63.(ub >= o) then `Ok else `Infeasible
 
+    let maybe_mixed_upper_bound_ovar 
+	(r : ctx) 
+	(r':S.ctx)
+	(ub: iroption)
+	(v, o) =
+      match ub, v with
+	| NInt,  Some (W_Int _) -> `Ok
+	| NReal, Some (W_Real _) -> `Ok
+	| SInt ub, Some (W_Int v) ->
+	  S.set_ub_local r' v Int63.(ub - o)
+	| SReal ub, Some (W_Real v) ->
+	  S.set_real_ub_local r' v Float.(ub - (Int63.to_float o))
+	| SInt ub, None ->
+	  if Int63.(ub >= o) then `Ok else `Infeasible
+	| SReal ub, None ->
+	  if Float.(ub >= (Int63.to_float o)) then `Ok else `Infeasible
+	| _, _ -> raise (Failure "Unreachable case maybe_mixed_upper_bound_ovar")
+
+
     let maybe_lower_bound_ovar r r' lb (v, o) =
       match lb, v with
       | None, _ ->
@@ -847,6 +948,25 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         S.set_lb_local r' v Int63.(lb - o)
       | Some lb, None ->
         if Int63.(lb <= o) then `Ok else `Infeasible
+
+    let maybe_mixed_lower_bound_ovar 
+	(r : ctx) 
+	(r':S.ctx)
+	(lb: iroption)
+	(v, o) =
+      match lb, v with
+	| NInt, Some (W_Int _) -> `Ok
+	| NReal, Some (W_Real _) -> `Ok
+	| SInt lb, Some (W_Int v) ->
+	  S.set_lb_local r' v Int63.(lb - o)
+	| SReal lb, Some (W_Real v) ->
+	  S.set_real_lb_local r' v Float.(lb - (Int63.to_float o))
+	| SInt lb, None ->
+	  if Int63.(lb <= o) then `Ok else `Infeasible
+	| SReal lb, None ->
+	  if Float.(lb <= (Int63.to_float o)) then `Ok else `Infeasible
+	| _, _ -> raise (Failure "Unreachable case maybe_mixed_upper_bound_ovar")
+
 
     let foldi_responses_occs {r_occ_h} v ~f =
       match Hashtbl.find r_occ_h v with
@@ -877,6 +997,37 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         let n = Option.value_exn n ~here:_here_ in
         g n N_Ok
 
+
+    let foldi_responses_mixed_occs {r_mocc_h} v ~f =
+      match Hashtbl.find r_mocc_h v with
+	| None ->
+          if true then raise (Unreachable.Exn _here_);
+          N_Ok
+	| Some d ->
+          let n = Dequeue.back_index d in
+          let n = Option.value_exn n ~here:_here_ in
+          let rec g i acc =
+            if i <= n then
+              match Dequeue.get_opt d i with
+		| Some (_, _, _, {contents = _} as o) ->
+		  (match f i o with
+		    | N_Unsat ->
+                      N_Unsat
+		    | N_Tightened ->
+                      g (i + 1) N_Tightened 
+		    | N_Ok ->
+                      g (i + 1) acc)
+		(* | Some _ ->
+		   g (i + 1) acc *)
+		| None ->
+		  raise (Unreachable.Exn _here_)
+            else
+              acc in
+          let n = Dequeue.front_index d in
+          let n = Option.value_exn n ~here:_here_ in
+          g n N_Ok
+
+
     let for_all_occs {r_occ_h} v ~f =
       match Hashtbl.find r_occ_h v with
       | None ->
@@ -891,9 +1042,29 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | Some d ->
         dequeue_exists_with_swap d ~f
 
+
+    let for_all_moccs {r_mocc_h} v ~f =
+      match Hashtbl.find r_mocc_h v with
+	| None ->
+          true
+	| Some d ->
+          Dequeue.for_all d ~f
+
+    let exists_moccs {r_mocc_h} v ~f =
+      match Hashtbl.find r_mocc_h v with
+	| None ->
+          false
+	| Some d ->
+          dequeue_exists_with_swap d ~f
+
     let satisfied_occ r r' (row, _, _, _ as occ) =
       let f row' ~bounds = equal_row r r' row row' in
       exists_candidate r r' occ ~f
+
+    let satisfied_mocc r r' (row, _, _, _ as mocc) =
+      let f row' ~bounds = equal_mixed_row r r' row row' in
+      exists_mixed_candidate r r' mocc ~f
+
 
     (* propagate *)
 
@@ -1034,9 +1205,22 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | None, o ->
         o
 
+    let deref_mvar_sol r' sol = function
+      | Some (W_Int v), o ->
+        Int63.(to_float(S.ideref_sol r' sol v + o))
+      | Some (W_Real v), o ->
+	Float.(S.rderef_sol r' sol v + (Int63.to_float o))
+      | None, o ->
+        Int63.to_float o
+
+
     let matches_row r' sol row_concrete row =
       Array.for_all2_exn row row_concrete
         ~f:(fun ov c -> Int63.equal (deref_ovar_sol r' sol ov) c)
+
+    let matches_mixed_row r' sol row_concrete row =
+      Array.for_all2_exn row row_concrete
+        ~f:(fun ov c -> Float.equal (deref_mvar_sol r' sol ov) c)
 
     let exists_index (m1, m2, l) ~f ~min ~max =
       List.exists l ~f ||
@@ -1049,14 +1233,32 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       let f = matches_row r' sol row in
       exists_index index ~min:row.(i) ~max:row.(i) ~f
 
+    let check_for_mocc r r' sol ((row, index, i, _) : mixed_occ) =
+      let row = Array.map row ~f:(deref_mvar_sol r' sol) in
+      let f = matches_mixed_row r' sol row 
+      and min = Int63.of_int(Float.iround_down_exn (row.(i))) 
+      and max = Int63.of_int(Float.iround_down_exn (row.(i))) in
+      exists_index index ~min ~max ~f
+
     let check_for_bvar ({r_occ_h} as r) r' sol v =
       not (S.bderef_sol r' sol v) ||
         for_all_occs r v ~f:(check_for_occ r r' sol)
+
+    let check_for_bvar_mixed ({r_mocc_h} as r) r' sol v =
+      not (S.bderef_sol r' sol v) ||
+	for_all_moccs r v ~f:(check_for_mocc r r' sol)
 
     let check ({r_stats; r_bvar_d} as r) r' sol =
       r_stats.s_check <- r_stats.s_check + 1;
       let f = check_for_bvar r r' sol in
       intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
+
+
+    let check_mixed ({r_stats; r_bvar_d} as r) r' sol =
+      r_stats.s_check <- r_stats.s_check + 1;
+      let f = check_for_bvar_mixed r r' sol in
+      intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
+
 
     (* branching *)
 
