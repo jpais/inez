@@ -33,6 +33,13 @@ with compare, sexp
 type ('i, 'r) ireither = W_Int of 'i | W_Real of 'r
 with compare, sexp
 
+ type iroption =     SInt of Int63.t 
+		   | SReal of Float.t
+		   | NInt
+		   | NReal
+ with compare, sexp_of
+
+
 (** Represents the type of linear program. J_Int is a pure integer program and J_Mix a mixed program*)
 type ('i,'r) lp_type      =   LP_Int of 'i isum
 			    | LP_Mix of ('i,'r) ireither rsum

@@ -101,7 +101,6 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     sexp_of_t = Imt.sexp_of_bvar
   }
 
-
 (** Pure Int DB*)
 
   type row = Imt.ivar option offset array
@@ -156,7 +155,10 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 (** Mixed Int/Real DB *)
 
 (** Represents a row of a DB table. The row is an array of ivars and rvars*)
-  type mixed_row = (Imt.ivar, Imt.rvar) Terminology.ireither option offset array
+  type mvar = (Imt.ivar, Imt.rvar) Terminology.ireither
+  with compare, sexp_of
+
+  type mixed_row = mvar option offset array
   with compare, sexp_of
 
 (** Represents a table*)
@@ -174,10 +176,8 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type mixed_diff = (Imt.ivar * Imt.ivar, Imt.rvar * Imt.rvar) Terminology.ireither 
   with compare, sexp_of
 *)
-  type mixed_diff = ((Imt.ivar,Imt.rvar) ireither * (Imt.ivar,Imt.rvar) ireither)
+  type mixed_diff = (mvar * mvar)
   with compare, sexp_of
-
-
 
   let hashable_mixed_diff = {
     Hashtbl.Hashable.
@@ -205,7 +205,11 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type mixed_occ = mixed_row * mixed_index * int * int option ref
   with compare, sexp_of
 
-  type mixed_bounds_array = (Float.t option * Float.t option) array
+(*  type mixed_bounds_array = ((Int63.t,Float.t) ireither option * (Int63.t,Float.t) ireither option) array
+  with compare, sexp_of
+*)
+
+  type mixed_bounds_array = (iroption * iroption) array
   with compare, sexp_of
 
 (** Bounds for a constant only partition of the table*)
@@ -440,21 +444,44 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | None, o ->
         Some o
 
+(*
     let lb_of_movar r' = function
-      | Some (W_Real v), o -> 
-	Option.(S.get_real_lb_local r' v >>| Float.(+) o)
-      | Some (W_Int v), o ->
-	Option.(S.get_lb_local r' v >>| (fun x -> Float.((Int63.to_float x) + o )))
-      | None, o ->
-	Some o
+      | Some (W_Real v), o -> (match (S.get_real_lb_local r' v) with
+                            	  | Some x -> Some (W_Real (Float.(x + (Int63.to_float o))))
+                             	  | _ -> None)
+      | Some (W_Int v), o -> (match (S.get_lb_local r' v) with
+	                          | Some x -> Some (W_Int Int63.(x + o))
+				  | _ -> None)  
+      | None, o -> Some (W_Int o)
 
-    let ub_of_movar r' = function
-      | Some (W_Real v), o -> 
-	Option.(S.get_real_ub_local r' v >>| Float.(+) o)
-      | Some (W_Int v), o ->
-	Option.(S.get_ub_local r' v >>| (fun x -> Float.((Int63.to_float x) + o )))
-      | None, o ->
-	Some o
+   let ub_of_movar r' = function
+      | Some (W_Real v), o -> (match (S.get_real_ub_local r' v) with
+                            	  | Some x -> Some (W_Real (Float.(x + (Int63.to_float o))))
+                             	  | _ -> None)
+      | Some (W_Int v), o -> (match (S.get_ub_local r' v) with
+	                          | Some x -> Some (W_Int Int63.(x + o))
+				  | _ -> None)  
+      | None, o -> Some (W_Int o)
+*)
+
+ let lb_of_movar r' = function
+      | Some (W_Real v), o -> (match (S.get_real_lb_local r' v) with
+                            	  | Some x -> SReal (Float.(x + (Int63.to_float o)))
+                             	  | _ -> NReal)
+      | Some (W_Int v), o -> (match (S.get_lb_local r' v) with
+	                          | Some x -> SInt (Int63.(x + o))
+				  | _ -> NInt)  
+      | None, o -> (SInt o)
+
+   let ub_of_movar r' = function
+      | Some (W_Real v), o -> (match (S.get_real_ub_local r' v) with
+                            	  | Some x -> SReal (Float.(x + (Int63.to_float o)))
+                             	  | _ -> NReal)
+      | Some (W_Int v), o -> (match (S.get_ub_local r' v) with
+	                          | Some x -> SInt (Int63.(x + o))
+				  | _ -> NInt)  
+      | None, o -> (SInt o)
+
 
     let bounds_of_row r' =
       let f ov = lb_of_ovar r' ov, ub_of_ovar r' ov in
@@ -468,8 +495,18 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       (LL.(lb' <= lb) && LU.(lb <= ub')) ||
         (LU.(lb' <= ub) && UU.(ub <= ub'))
 
+    let bounds_within_for_mixed_dim 
+	((lb, ub)  : iroption * iroption) 
+	((lb', ub'): iroption * iroption)  =
+      (MLL.(lb' <= lb) && MLU.(lb <= ub')) ||
+        (MLU.(lb' <= ub) && MUU.(ub <= ub'))
+
     let bounds_within_for_dim b b' =
       bounds_within_for_dim b b' || bounds_within_for_dim b' b
+
+    let bounds_within_for_mixed_dim b b' =
+      bounds_within_for_mixed_dim b b' || bounds_within_for_mixed_dim b' b
+
 
     let lb_of_diff {r_diff_h} r' v1 v2 =
       if Imt.compare_ivar v1 v2 = 0 then
@@ -482,16 +519,57 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         Hashtbl.find r_diff_h (v2, v1) >>=
           S.get_ub_local r' >>| Int63.neg
 
-	      
-    let lb_of_mdiff {r_mdiff_h} r' v1 v2 =
+
+    let lb_of_mdiff_aux r = function
+      | (W_Int v)  -> (match (S.get_lb_local r v) with 
+	                 | Some x -> SInt x
+			 | _ -> NInt)
+      | (W_Real v) -> (match (S.get_real_lb_local r v) with
+	                 | Some x -> SReal x
+			 | _ -> NReal)
+
+    let ub_of_mdiff_aux r = function
+      | (W_Int v)  -> (match (S.get_ub_local r v) with 
+	                 | Some x -> SInt x
+			 | _ -> NInt)
+      | (W_Real v) -> (match (S.get_real_ub_local r v) with
+	                 | Some x -> SReal x
+			 | _ -> NReal)
+
+    let negate_mixed = function
+      | SInt x -> SInt (Int63.neg x)
+      | SReal x -> SReal (Float.neg x)
+      | NInt -> NInt
+      | NReal -> NReal
+
+    let lb_of_mdiff {r_mdiff_h} 
+	(r' : S.ctx) 
+	(v1 : mvar) 
+	(v2 : mvar) =
       match v1, v2 with
 	| W_Int x1, W_Int x2 ->
 	  if Imt.compare_ivar x1 x2 = 0 then
-	    Some Float.zero
-	  else if Imt.compare_ivar x1 x2 < 0 then
-	    let open Option in 
-	    Hashtbl.find r_mdiff_h (v1, v2) >>= S.get_
-
+	    (SInt Int63.zero)
+	  else if (Imt.compare_ivar x1 x2) < 0 then	   
+	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with 
+	      | Some x -> lb_of_mdiff_aux r' x
+	      | None -> NInt)
+	  else 
+	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with
+	      | Some x -> negate_mixed (ub_of_mdiff_aux r' x)
+	      | None -> NInt) 
+	| W_Real x1, W_Real x2 -> 
+	  if Imt.compare_rvar x1 x2 = 0 then
+	    (SReal Float.zero)
+	  else if Imt.compare_rvar x1 x2 < 0 then
+	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
+	      | Some x -> lb_of_mdiff_aux r' x
+	      | None -> NReal) 
+	  else 
+	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
+	      | Some x -> negate_mixed (ub_of_mdiff_aux r' x)
+	      | None -> NReal)
+	| _, _ -> raise (Failure "Unexpected case lb_of_mdiff") 
 
     let ub_of_diff {r_diff_h} r' v1 v2 =
       if Imt.compare_ivar v1 v2 = 0 then
@@ -504,8 +582,43 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         Hashtbl.find r_diff_h (v2, v1) >>=
           S.get_lb_local r' >>| Int63.neg
 
+ let ub_of_mdiff {r_mdiff_h} 
+     (r' : S.ctx)
+     (v1 : mvar)
+     (v2 : mvar) =
+     match v1, v2 with
+	| W_Int x1, W_Int x2 ->
+	  if Imt.compare_ivar x1 x2 = 0 then
+	    (SInt Int63.zero)
+	  else if (Imt.compare_ivar x1 x2) < 0 then	   
+	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with 
+	      | Some x -> ub_of_mdiff_aux r' x
+	      | None -> NInt)
+	  else 
+	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with
+	      | Some x -> negate_mixed (lb_of_mdiff_aux r' x)
+	      | None -> NInt) 
+	| W_Real x1, W_Real x2 -> 
+	  if Imt.compare_rvar x1 x2 = 0 then
+	    (SReal Float.zero)
+	  else if Imt.compare_rvar x1 x2 < 0 then
+	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
+	      | Some x -> ub_of_mdiff_aux r' x
+	      | None -> NReal) 
+	  else 
+	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
+	      | Some x -> negate_mixed (lb_of_mdiff_aux r' x)
+	      | None -> NReal)
+	| _, _ -> raise (Failure "Unexpected case ub_of_mdiff")
+
+
     let bounds_within a a' =
       Array.for_all2_exn a a' ~f:bounds_within_for_dim
+
+    let mixed_bounds_within 
+	(a : mixed_bounds_array) 
+	(a': mixed_bounds_array) =
+      Array.for_all2_exn a a' ~f:bounds_within_for_mixed_dim
 
     let equal_row r r' row1 row2 =
       let f ov1 ov2 =
@@ -529,7 +642,41 @@ module Make (Imt : Imt_intf.S_essentials) = struct
             false)
         | (None, o1), (None, o2) ->
           Int63.(o1 = o2) in
+      Array.for_all2_exn row1 row2 ~f   
+
+
+ let equal_mixed_row 
+     r 
+     (r' : S.ctx)
+     (row1 : mixed_row)
+     (row2 : mixed_row) =
+      let f ov1 ov2 =
+        match ov1, ov2 with
+        | (Some v1, o1), (Some v2, o2) ->
+          let lb = lb_of_mdiff r r' v1 v2
+          and ub = ub_of_mdiff r r' v1 v2 in
+          (match lb, ub with
+          | SInt lb, SInt ub ->
+            Int63.(lb = ub && lb = o2 - o1)
+          | SReal lb, SReal ub ->
+            Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
+	  | _, _ ->
+            false)
+        | (Some v1, o1), (None, o2) |
+          (None, o2), (Some v1, o1) ->
+          let lb = lb_of_mdiff_aux r' v1
+          and ub = ub_of_mdiff_aux r' v1 in
+          (match lb, ub with
+          | SInt lb, SInt ub ->
+            Int63.(lb = ub && lb = o2 - o1)
+          | SReal lb, SReal ub ->
+            Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
+          | _ ->
+            false)
+        | (None, o1), (None, o2) ->
+          Int63.(o1 = o2) in
       Array.for_all2_exn row1 row2 ~f
+
 
     let maybe_equal_rows r r' row a row' a' =
       bounds_within a a' &&
@@ -547,9 +694,47 @@ module Make (Imt : Imt_intf.S_essentials) = struct
              | _ ->
                true))
 
+ let maybe_equal_mixed_rows 
+     (r : ctx) 
+     (r' : S.ctx) 
+     (row : mixed_row) 
+     (a : mixed_bounds_array)  
+     (row':mixed_row) 
+     (a' : mixed_bounds_array) =
+      mixed_bounds_within a a' &&
+        (Array.for_all2_exn row row'
+           ~f:(fun ov1 ov2 ->
+             match ov1, ov2 with
+             | (Some v1, o1), (Some v2, o2) ->
+               let open Int63 in
+               let d = o2 - o1
+               and lb = lb_of_mdiff r r' v1 v2
+               and ub = ub_of_mdiff r r' v1 v2 in
+	       let ge_mixed dif = (function
+		 | SInt x -> Int63.(>=) d x
+		 | SReal x -> Float.(>=) (Int63.to_float d) x
+		 | _ -> true)	    
+	       and le_mixed dif = (function
+		 | SInt x -> Int63.(<=) d x
+		 | SReal x -> Float.(<=) (Int63.to_float d) x
+		 | _ -> true) in
+               (ge_mixed d lb) && (le_mixed d ub)
+             | _ ->
+               true))
+
     let fold_index
         (m1, m2, l : index)
         ~init ~(f : 'a folded_no_bounds) =
+      let f acc data = f data ~acc in
+      let f ~key ~data init = List.fold_left data ~init ~f
+      and init = List.fold_left l ~f ~init in
+      let init = Map.fold m1 ~init ~f in
+      Map.fold m2 ~init ~f
+
+    let fold_mixed_index
+        (m1, m2, l : mixed_index)
+        ~init 
+	~(f : 'a mixed_folded_no_bounds) =
       let f acc data = f data ~acc in
       let f ~key ~data init = List.fold_left data ~init ~f
       and init = List.fold_left l ~f ~init in
@@ -565,6 +750,21 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         else
           acc in
       List.fold_left l ~f ~init
+
+    let fold_mixed_candidates_list 
+	(r  : ctx)
+	(r' : S.ctx) 
+	(row:mixed_row) l i ~init 
+	~(f : 'a mixed_folded) =
+      let a = bounds_of_mixed_row r' row in
+      let f acc (data:mixed_row) =
+        let bounds = bounds_of_mixed_row r' data  in
+        if maybe_equal_mixed_rows r r' data bounds row a then
+          f data ~bounds ~acc
+        else
+          acc in
+      List.fold_left l ~f ~init
+
 
     let fold_constant_candidates
         ({r_stats; r_mbounds_h} as r)
@@ -588,7 +788,7 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       and key = a, m in
       let r = Hashtbl.find_or_add r_mbounds_h key ~default in
       Tuple3.map1 r ~f:Array.copy
-
+    
     let fold_candidates_map r r' row m i ~init ~(f : 'a folded) =
       let a = bounds_of_row r' row in
       let f acc data =
