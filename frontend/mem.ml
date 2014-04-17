@@ -158,7 +158,10 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type mvar = (Imt.ivar, Imt.rvar) Terminology.ireither
   with compare, sexp_of
 
-  type mixed_row = mvar option offset array
+  type mvar_bound = (Int63.t option, Float.t option) ireither
+  with compare, sexp_of 
+
+  type mixed_row = (Imt.ivar option, Imt.rvar option) ireither offset array
   with compare, sexp_of
 
 (** Represents a table*)
@@ -209,7 +212,7 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   with compare, sexp_of
 *)
 
-  type mixed_bounds_array = (iroption * iroption) array
+  type mixed_bounds_array = (mvar_bound * mvar_bound) array
   with compare, sexp_of
 
 (** Bounds for a constant only partition of the table*)
@@ -291,7 +294,12 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   let all_concrete =
     Array.for_all ~f:(function None, _ -> true | _ -> false)
 
-  let index_of_db_dimension l i =
+  let all_concrete_mixed = 
+    Array.for_all ~f:(function
+                       | W_Int None, _ | W_Real None, _ -> true
+		       | _ -> false)
+
+let index_of_db_dimension l i =
     List.fold_left l
       ~init:(Int63.Map.empty, Int63.Map.empty, [])
       ~f:(fun (accm1, accm2, accl) data ->
@@ -303,12 +311,25 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         | _ ->
           accm1, accm2, data :: accl)
 
+
+  let index_of_mixed_db_dimension l i =
+    List.fold_left l
+      ~init:(Int63.Map.empty, Int63.Map.empty, [])
+      ~f:(fun (accm1, accm2, accl) data ->
+        match Array.get data i with
+        | (W_Int None | W_Real None), key when all_concrete_mixed data ->
+          Map.add_multi accm1 ~key ~data, accm2, accl
+        | (W_Int None | W_Real None), key ->
+          accm1, Map.add_multi accm2 ~key ~data, accl
+        | _ ->
+          accm1, accm2, data :: accl)
+
   let index_of_db {r_idb_h} d i =
     let default () = index_of_db_dimension d i in
     Hashtbl.find_or_add r_idb_h d ~default
 
   let index_of_mdb {r_mdb_h} d i =
-    let default () = index_of_db_dimension d i in
+    let default () = index_of_mixed_db_dimension d i in
     Hashtbl.find_or_add r_mdb_h d ~default
 
   let bvar_in_dequeue d v =
@@ -367,18 +388,22 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     Array.iter2_exn row1 row2
       ~f:(fun (v1, _) (v2, _) ->
 	match v1, v2 with
-	  | Some (W_Int x1), Some (W_Int x2) when not (Imt.compare_ivar x1 x2 = 0) ->
+	  | W_Int (Some x1), W_Int (Some x2) when not (Imt.compare_ivar x1 x2 = 0) ->
 	    let v = var_of_mdiff r (W_Int x1) (W_Int x2) ~fd ~frv in
 	    let v = Option.value_exn v ~here:_here_ in
 	    frv v
-	  | Some (W_Real x1), Some (W_Real x2) when not (Imt.compare_rvar x1 x2 = 0) ->
+	  | W_Real (Some x1), W_Real (Some x2) when not (Imt.compare_rvar x1 x2 = 0) ->
 	    let v = var_of_mdiff r (W_Real x1) (W_Real x2) ~fd ~frv in
 	    let v = Option.value_exn v ~here:_here_ in
 	    frv v
-	  | Some v, _ | _, Some v ->
-	    frv v
-	  | None, None ->
-	    ())
+	  | W_Int _, W_Real _ | W_Real _ , W_Int _ -> raise (Failure "Unexpected case register_mdiffs")
+	  | W_Int (Some v), _ | _, W_Int (Some v) ->
+	    frv (W_Int v)
+	  | W_Real (Some v), _ | _, W_Real (Some v) ->
+            frv (W_Real v)
+	  | W_Int None, W_Int None -> ()
+	  | W_Real None, W_Real None -> ()
+      )
 
   let assert_membership
       ({r_bvar_d; r_occ_h} as r) b e l ~fd ~frv =
@@ -444,42 +469,22 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       | None, o ->
         Some o
 
-(*
     let lb_of_movar r' = function
       | Some (W_Real v), o -> (match (S.get_real_lb_local r' v) with
-                            	  | Some x -> Some (W_Real (Float.(x + (Int63.to_float o))))
-                             	  | _ -> None)
+          | Some x -> SReal (Float.(x + (Int63.to_float o)))
+          | _ -> NReal)
       | Some (W_Int v), o -> (match (S.get_lb_local r' v) with
-	                          | Some x -> Some (W_Int Int63.(x + o))
-				  | _ -> None)  
-      | None, o -> Some (W_Int o)
-
-   let ub_of_movar r' = function
-      | Some (W_Real v), o -> (match (S.get_real_ub_local r' v) with
-                            	  | Some x -> Some (W_Real (Float.(x + (Int63.to_float o))))
-                             	  | _ -> None)
-      | Some (W_Int v), o -> (match (S.get_ub_local r' v) with
-	                          | Some x -> Some (W_Int Int63.(x + o))
-				  | _ -> None)  
-      | None, o -> Some (W_Int o)
-*)
-
- let lb_of_movar r' = function
-      | Some (W_Real v), o -> (match (S.get_real_lb_local r' v) with
-                            	  | Some x -> SReal (Float.(x + (Int63.to_float o)))
-                             	  | _ -> NReal)
-      | Some (W_Int v), o -> (match (S.get_lb_local r' v) with
-	                          | Some x -> SInt (Int63.(x + o))
-				  | _ -> NInt)  
+	  | Some x -> SInt (Int63.(x + o))
+	  | _ -> NInt)  
       | None, o -> (SInt o)
-
-   let ub_of_movar r' = function
+	
+    let ub_of_movar r' = function
       | Some (W_Real v), o -> (match (S.get_real_ub_local r' v) with
-                            	  | Some x -> SReal (Float.(x + (Int63.to_float o)))
-                             	  | _ -> NReal)
+          | Some x -> SReal (Float.(x + (Int63.to_float o)))
+          | _ -> NReal)
       | Some (W_Int v), o -> (match (S.get_ub_local r' v) with
-	                          | Some x -> SInt (Int63.(x + o))
-				  | _ -> NInt)  
+	  | Some x -> SInt (Int63.(x + o))
+	  | _ -> NInt)  
       | None, o -> (SInt o)
 
 
@@ -496,8 +501,8 @@ module Make (Imt : Imt_intf.S_essentials) = struct
         (LU.(lb' <= ub) && UU.(ub <= ub'))
 
     let bounds_within_for_mixed_dim 
-	((lb, ub)  : iroption * iroption) 
-	((lb', ub'): iroption * iroption)  =
+	((lb, ub)  : mvar_bound * mvar_bound) 
+	((lb', ub'): mvar_bound * mvar_bound) =
       (MLL.(lb' <= lb) && MLU.(lb <= ub')) ||
         (MLU.(lb' <= ub) && MUU.(ub <= ub'))
 
@@ -522,25 +527,25 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 
     let lb_of_mdiff_aux r = function
       | (W_Int v)  -> (match (S.get_lb_local r v) with 
-	                 | Some x -> SInt x
-			 | _ -> NInt)
+	                 | Some x -> W_Int (Some x)
+			 | _ -> W_Int None)
       | (W_Real v) -> (match (S.get_real_lb_local r v) with
-	                 | Some x -> SReal x
-			 | _ -> NReal)
+	                 | Some x -> W_Real (Some x)
+			 | _ -> W_Real None)
 
     let ub_of_mdiff_aux r = function
       | (W_Int v)  -> (match (S.get_ub_local r v) with 
-	                 | Some x -> SInt x
-			 | _ -> NInt)
+	                 | Some x -> W_Int (Some x)
+			 | _ -> W_Int None)
       | (W_Real v) -> (match (S.get_real_ub_local r v) with
-	                 | Some x -> SReal x
-			 | _ -> NReal)
+	                 | Some x -> W_Real (Some x)
+			 | _ -> W_Real None)
 
     let negate_mixed = function
-      | SInt x -> SInt (Int63.neg x)
-      | SReal x -> SReal (Float.neg x)
-      | NInt -> NInt
-      | NReal -> NReal
+      | W_Int (Some x) -> W_Int (Some (Int63.neg x))
+      | W_Real (Some x) -> W_Real (Some (Float.neg x))
+      | W_Int None -> W_Int None
+      | W_Real None -> W_Real None
 
     let lb_of_mdiff {r_mdiff_h} 
 	(r' : S.ctx) 
@@ -549,26 +554,26 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       match v1, v2 with
 	| W_Int x1, W_Int x2 ->
 	  if Imt.compare_ivar x1 x2 = 0 then
-	    (SInt Int63.zero)
+	    (W_Int (Some Int63.zero))
 	  else if (Imt.compare_ivar x1 x2) < 0 then	   
 	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with 
 	      | Some x -> lb_of_mdiff_aux r' x
-	      | None -> NInt)
+	      | None -> W_Int None)
 	  else 
 	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with
 	      | Some x -> negate_mixed (ub_of_mdiff_aux r' x)
-	      | None -> NInt) 
+	      | None -> W_Int None) 
 	| W_Real x1, W_Real x2 -> 
 	  if Imt.compare_rvar x1 x2 = 0 then
-	    (SReal Float.zero)
+	    (W_Real (Some Float.zero))
 	  else if Imt.compare_rvar x1 x2 < 0 then
 	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
 	      | Some x -> lb_of_mdiff_aux r' x
-	      | None -> NReal) 
+	      | None -> W_Real None) 
 	  else 
 	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
 	      | Some x -> negate_mixed (ub_of_mdiff_aux r' x)
-	      | None -> NReal)
+	      | None -> W_Real None)
 	| _, _ -> raise (Failure "Unexpected case lb_of_mdiff") 
 
     let ub_of_diff {r_diff_h} r' v1 v2 =
@@ -589,26 +594,26 @@ module Make (Imt : Imt_intf.S_essentials) = struct
      match v1, v2 with
 	| W_Int x1, W_Int x2 ->
 	  if Imt.compare_ivar x1 x2 = 0 then
-	    (SInt Int63.zero)
+	    (W_Int (Some Int63.zero))
 	  else if (Imt.compare_ivar x1 x2) < 0 then	   
 	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with 
 	      | Some x -> ub_of_mdiff_aux r' x
-	      | None -> NInt)
+	      | None -> W_Int None)
 	  else 
 	    (match (Hashtbl.find r_mdiff_h (v1, v2)) with
 	      | Some x -> negate_mixed (lb_of_mdiff_aux r' x)
-	      | None -> NInt) 
+	      | None -> W_Int None) 
 	| W_Real x1, W_Real x2 -> 
 	  if Imt.compare_rvar x1 x2 = 0 then
-	    (SReal Float.zero)
+	    (W_Real (Some Float.zero))
 	  else if Imt.compare_rvar x1 x2 < 0 then
 	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
 	      | Some x -> ub_of_mdiff_aux r' x
-	      | None -> NReal) 
+	      | None -> W_Real None) 
 	  else 
 	    (match (Hashtbl.find r_mdiff_h (v1,v2)) with
 	      | Some x -> negate_mixed (lb_of_mdiff_aux r' x)
-	      | None -> NReal)
+	      | None -> W_Real None)
 	| _, _ -> raise (Failure "Unexpected case ub_of_mdiff")
 
 
@@ -652,24 +657,24 @@ module Make (Imt : Imt_intf.S_essentials) = struct
      (row2 : mixed_row) =
       let f ov1 ov2 =
         match ov1, ov2 with
-        | (Some v1, o1), (Some v2, o2) ->
-          let lb = lb_of_mdiff r r' v1 v2
-          and ub = ub_of_mdiff r r' v1 v2 in
-          (match lb, ub with
-          | SInt lb, SInt ub ->
-            Int63.(lb = ub && lb = o2 - o1)
-          | SReal lb, SReal ub ->
-            Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
-	  | _, _ ->
-            false)
+	  | (W_Int (Some v1), o1), (W_Int (Some v2), o2) ->
+            let lb = lb_of_mdiff r r' (W_Int v1) (W_Int v2)
+            and ub = ub_of_mdiff r r' (W_Int v1) (W_Int v2) in
+            (match lb, ub with
+              | W_Int (Some lb), W_Int (Some ub) ->
+		Int63.(lb = ub && lb = o2 - o1)
+              | W_Real (Some lb), W_Real (Some ub) ->
+		Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
+	      | _, _ ->
+		false)
         | (Some v1, o1), (None, o2) |
           (None, o2), (Some v1, o1) ->
           let lb = lb_of_mdiff_aux r' v1
           and ub = ub_of_mdiff_aux r' v1 in
           (match lb, ub with
-          | SInt lb, SInt ub ->
+          | W_Int (Some lb), W_Int (Some ub) ->
             Int63.(lb = ub && lb = o2 - o1)
-          | SReal lb, SReal ub ->
+          | W_Real (Some lb), W_Real (Some ub) ->
             Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
           | _ ->
             false)
@@ -1071,6 +1076,8 @@ module Make (Imt : Imt_intf.S_essentials) = struct
     type bp = Int63.t option * Int63.t option
     with sexp_of
 
+    type bp_mixed = iroption * iroption
+
     let approx_candidates_folded
         ?cnst_only:(cnst_only = false)
         r r' witness_row row ~bounds ~acc:(a, z, s) =
@@ -1096,6 +1103,60 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       and s = s || equal_row r r' witness_row row in
       a, Zom.update z row ~equal, s
 
+
+    let map2 (x:iroption) (y:iroption) 
+	~(fint:(Int63.t -> Int63.t -> Int63.t)) 
+	~(freal:(Float.t -> Float.t -> Float.t)) =
+      match x, y with
+	| SInt x, SInt y ->
+	  SInt (fint x y)
+	| SReal x, SReal y ->
+	  SReal (freal x y)
+	| NInt, NInt -> 
+	  NInt
+	| NReal, NReal ->
+	  NReal
+	| _, _ -> raise (Failure "Undefined case for map2 iroption")
+
+ let approx_mixed_candidates_folded
+        ?cnst_only:(cnst_only = false)
+        (r : ctx) 
+	(r': S.ctx)
+	(witness_row: mixed_row)
+	(row: mixed_row) 
+	~(bounds: mixed_bounds_array) 
+	~acc:(a, z, s) =
+      Array.iteri bounds
+        ~f:(fun i (lb, ub) ->
+          let lb', ub' = a.(i) in
+          if cnst_only then
+            match lb, ub, lb', ub' with
+            | SInt lb, SInt ub, SInt lb', SInt ub' 
+	      when Int63.compare lb ub = 0 ->
+              a.(i) <- (SInt (Int63.min lb lb'), SInt (Int63.max ub ub'))
+	    | SReal lb, SReal ub, SReal lb', SReal ub'
+	      when Float.compare lb ub = 0 ->
+	      a.(i) <- (SReal (Float.min lb lb'), SReal (Float.max ub ub'))
+            | _, _, _, _ ->
+              ()
+          else
+            a.(i) <- (map2 lb lb' (Int63.min) (Float.min),
+		      map2 ub ub' (Int63.max) (Float.max))
+	);
+      let equal =
+        let eq1 v1 v2 = (match v1, v2 with
+	  | W_Int v1, W_Int v2 -> Imt.compare_ivar v1 v2 = 0                          
+          | W_Real v1, W_Real v2 -> Imt.compare_rvar v1 v2 = 0
+	  | _, _ -> false) in
+        let eq1 = Option.equal eq1
+        and eq2 = Int63.equal in
+        let equal = Tuple2.equal ~eq1 ~eq2 in
+        Array.equal ~equal
+      and s = s || equal_mixed_row r r' witness_row row in
+      a, Zom.update z row ~equal, s
+
+
+
     let approx_candidates
         ?cnst_only:(cnst_only = false)
         r r' (row, (m1, m2, l), i, _) =
@@ -1106,6 +1167,21 @@ module Make (Imt : Imt_intf.S_essentials) = struct
       let init = fold_constant_candidates r r' row m1 i ~init ~f in
       let init = fold_candidates_map r r' row m2 i ~init ~f in
       fold_candidates_list r r' row l i ~init ~f
+
+
+    let approx_mixed_candidates
+        ?cnst_only:(cnst_only = false)
+        r r' ((row:mixed_row), (m1, m2, l), i, _) =     
+      let fmap v = (match v with
+	| W_Int x  -> (SInt (Int63.max_value), SInt (Int63.min_value)) 
+	| W_Real x -> (SReal (Float.max_value), SReal (Float.min_value))) in
+      let init_array = Array.map fmap row in
+      let init = init_array, Zom.Z0, false
+      and f = approx_mixed_candidates_folded ~cnst_only r r' row in
+      let init = fold_mixed_constant_candidates r r' row m1 i ~init ~f in
+      let init = fold_candidates_mixed_map r r' row m2 i ~init ~f in
+      fold_mixed_candidates_list r r' row l i ~init ~f
+
 
     let fix_variable r v x =
       response_of_attempts

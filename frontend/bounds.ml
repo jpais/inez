@@ -29,21 +29,21 @@ end
 module MLL = struct
   let (<=) lb lb' = 
     match lb, lb' with
-      | SInt lb, SInt lb' -> 
+      | W_Int (Some lb), W_Int (Some lb') -> 
 	Int63.(lb <= lb')
-      | SInt lb, NInt ->
+      | W_Int (Some lb), W_Int None ->
 	Int63.(lb <= min_value)
-      | NInt, SInt lb ->
+      | W_Int None, W_Int (Some lb) ->
 	Int63.(min_value <= lb)
-      | SReal lb, SReal lb' ->
+      | W_Real (Some lb), W_Real (Some lb') ->
 	Float.(lb <= lb')
-      | SReal lb, NReal ->
+      | W_Real (Some lb), W_Real None ->
 	Float.(lb <= min_value)
-      | NReal, SReal lb ->
+      | W_Real None, W_Real (Some lb) ->
 	Float.(min_value <= lb) 
-      | NInt, NInt ->
+      | W_Real None, W_Real None ->
 	true
-      | NReal, NReal ->
+      | W_Int None, W_Int None ->
 	true
       | _, _ -> 
  	false
@@ -52,21 +52,21 @@ end
 module MUU = struct
   let (<=) ub ub' = 
     match ub, ub' with
-      | SInt ub, SInt ub' -> 
+      | W_Int (Some ub), W_Int (Some ub') -> 
 	Int63.(ub <= ub')
-      | SInt ub, NInt ->
+      | W_Int (Some ub), W_Int None ->
 	Int63.(ub <= max_value)
-      | NInt, SInt ub ->
+      | W_Int None, W_Int (Some ub) ->
 	Int63.(max_value <= ub)
-      | SReal ub, SReal ub' ->
+      | W_Real (Some ub), W_Real (Some ub') ->
 	Float.(ub <= ub')
-      | SReal ub, NReal ->
+      | W_Real (Some ub), W_Real None->
 	Float.(ub <= max_value)
-      | NReal, SReal ub ->
+      | W_Real None, W_Real (Some ub) ->
 	Float.(max_value <= ub) 
-      | NInt, NInt ->
+      | W_Int None, W_Int None->
 	true
-      | NReal, NReal ->
+      | W_Real None, W_Real None ->
 	true
       | _, _ ->
 	false
@@ -75,21 +75,21 @@ end
 module MLU = struct
   let (<=) lb ub =
     match lb, ub with 
-      | SInt lb, SInt ub -> 
+      | W_Int (Some lb), W_Int (Some ub) -> 
 	Int63.(lb <= ub)
-      | SInt lb, NInt ->
+      | W_Int (Some lb), W_Int None->
 	Int63.(lb <= max_value)
-      | NInt, SInt ub ->
+      | W_Int None, W_Int (Some ub) ->
 	Int63.(min_value <= ub)
-      | SReal lb, SReal ub ->
+      | W_Real (Some lb), W_Real (Some ub) ->
 	Float.(lb <= ub)
-      | SReal lb, NReal ->
+      | W_Real (Some lb), W_Real None->
 	Float.(lb <= max_value)
-      | NReal, SReal ub ->
+      | W_Real None, W_Real (Some ub) ->
 	Float.(min_value <= ub) 
-      | NInt, NInt ->
+      | W_Int None, W_Int None ->
 	true
-      | NReal, NReal ->
+      | W_Real None, W_Real None->
 	true
       | _, _ ->
 	false

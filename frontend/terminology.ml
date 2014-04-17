@@ -33,10 +33,10 @@ with compare, sexp
 type ('i, 'r) ireither = W_Int of 'i | W_Real of 'r
 with compare, sexp
 
- type iroption =     SInt of Int63.t 
-		   | SReal of Float.t
-		   | NInt
-		   | NReal
+type ('i, 'r) iroption =       SInt of 'i 
+			     | SReal of 'r
+			     | NInt
+			     | NReal
  with compare, sexp_of
 
 
