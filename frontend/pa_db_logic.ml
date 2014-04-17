@@ -1,7 +1,7 @@
 open Camlp4.PreCast
 ;;
 
-type y = Y_Int | Y_Bool
+type y = Y_Int | Y_Bool | Y_Real
 ;;
 
 exception Unreachable of string
@@ -22,6 +22,8 @@ let cast_pattern = function
     Some <:patt@loc< Terminology.H_Int $p$ >>
   | <:patt@loc< ($p$ : Bool) >> when irrefutable p ->
     Some <:patt@loc< Terminology.H_Bool $p$ >>
+  | <:patt@loc< ($p$ : Real) >> when irrefutable p ->
+    Some <:patt@loc< Terminology.H_Real $p$ >>
   | <:patt@loc< $lid:_$ >> as p ->
     Some <:patt@loc< Terminology.H_Int $p$ >>
   | <:patt< _ >> as p ->
@@ -91,6 +93,8 @@ let rec ylist_of_ctyp ?acc:(acc = []) = function
     ylist_of_ctyp ~acc:(Y_Int :: acc) c
   | <:ctyp< Bool $c$ >> ->
     ylist_of_ctyp ~acc:(Y_Bool :: acc) c
+  | <:ctyp< Real $c$ >> ->
+    ylist_of_ctyp ~acc:(Y_Real :: acc) c
   | _ ->
     None
 ;;
@@ -100,6 +104,8 @@ let gadt_param_of_y _loc = function
     <:ctyp< int >>
   | Y_Bool ->
     <:ctyp< bool >>
+  | Y_Real ->
+    <:ctyp< float >>
 ;;
 
 let gadt_param_of_ylist _loc l =
@@ -121,6 +127,8 @@ let schema_expr_of_y _loc  = function
     <:expr< Db_logic.S.S_Int >>
   | Y_Bool ->
     <:expr< Db_logic.S.S_Bool >>
+  | Y_Real ->
+    <:expr< Db_logic.S.S_Real >>
 ;;
 
 let schema_expr_of_ylist _loc l =
@@ -139,6 +147,8 @@ let make_column_expr _loc y id =
   match y with
   | Y_Int ->
     <:expr< Db_logic.R.R_Int $id:id$ >>
+  | Y_Real ->
+    <:expr< Db_logic.R.R_Real $id:id$ >>
   | Y_Bool ->
     <:expr< Db_logic.R.R_Bool (Db_logic.M.M_Bool $id:id$) >>
 ;;

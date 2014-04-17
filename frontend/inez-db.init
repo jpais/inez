@@ -3,7 +3,6 @@ let () =
   with Not_found -> () ;;
 
 #use "topfind" ;;
-#camlp4o;;
 #require "core" ;;
 #print_depth 4 ;;
 #print_length 4 ;;

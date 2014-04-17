@@ -30,6 +30,9 @@ sig
   val deref_bool :
     ctx -> (I.c, bool) Id.t -> bool option
 
+  val deref_real :
+    ctx -> (I.c, float) Id.t -> Core.Std.Float.t option 
+
   val write_bg_ctx : ctx -> string -> unit
 
   val add_objective :
