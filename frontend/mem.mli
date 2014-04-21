@@ -18,8 +18,8 @@ module Make (Imt : Imt_intf.S_essentials) : sig
   val assert_mixed_membership : 
     ctx ->
     Imt.bvar Core.Std.Hashtbl.key ->
-    (Imt.ivar option , Imt.rvar option) Terminology.ireither Terminology.offset list ->
-    (Imt.ivar option , Imt.rvar option) Terminology.ireither Terminology.offset list Core.Std.List.t ->
+    (Imt.ivar option Terminology.offset, Imt.rvar option Terminology.roffset) Terminology.ireither list ->
+    (Imt.ivar option Terminology.offset, Imt.rvar option Terminology.roffset) Terminology.ireither list Core.Std.List.t ->
     fd:((Imt.ivar, Imt.rvar) Terminology.ireither -> (Imt.ivar, Imt.rvar) Terminology.ireither -> (Imt.ivar, Imt.rvar) Terminology.ireither) ->
     frv:((Imt.ivar, Imt.rvar) Terminology.ireither -> unit) -> unit
 end

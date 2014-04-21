@@ -100,7 +100,7 @@ module type S_access = sig
   (** [add_eq ctx i rhs] asserts i = rhs *) 
   val add_eq : ctx -> ivar isum -> Int63.t -> unit
 
-  val add_real_eq : ctx -> (ivar, rvar) lp_type -> Float.t -> unit
+  val add_real_eq : ctx -> (ivar, rvar) ireither rsum -> Float.t -> unit
 
   (** [add_le ctx i rhs] asserts i <= rhs *) 
   val add_le : ctx -> ivar isum -> Int63.t -> unit
@@ -204,20 +204,6 @@ module type S_dp_access_bounds = sig
 end
 
 
-(*module type S_dp_real_access_bounds = sig
-
-  include S_essentials
-
-  include S_real_bounds with type ctx := ctx
-			and type t := rvar
- 
-  val bderef_local : ctx -> bvar -> bool option
-
-  val bderef_sol : ctx -> sol -> bvar -> bool
-
-end
-*)
-
 module type S_dp_access = sig
 
   include S_dp_access_bounds
@@ -243,24 +229,6 @@ module type S_dp_access = sig
 
 end
 
-
-(*module type S_dp_real_access = sig
- 
-  include S_dp_real_access_bounds
-
-  val rbranch :
-    ctx -> rvar -> float -> [`Ok | `Fail]
-
-  val rbranch_nary :
-    ctx -> rvar ->
-    middle:float -> n:int -> width:float ->
-    [`Ok | `Float]
-
-  val bbranch :
-    ctx -> bvar -> [`Ok | `Fail]
-
-end
-*)
 
 module type Dvars_access = sig
 
@@ -321,21 +289,6 @@ module type S_cut_gen_access = sig
      ctx -> ivar Terminology.iexpr -> unit
 
 end
-
-(*module type S_cut_gen_real_access = sig
-
-  include S_dp_access_bounds
-
-  module Drvars :
-    (Dvars_real_access
-     with type ctx_plug := ctx
-     and type sol_plug := sol)
-
-   val add_real_cut_local :
-    ctx -> rvar Terminology.rexpr -> unit
-
-end
-*)
 
 
 module type S_unit_creatable = sig

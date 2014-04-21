@@ -114,7 +114,11 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
   type mvar = (S.ivar, S.rvar) ireither
   with compare, sexp_of
 
-  type movar =  mvar option roffset
+ (* type movar =  mvar option roffset*)
+
+ (* type movar = (S.ivar option, S.rvar option) ireither roffset *)
+
+  type movar = (S.ivar option offset, S.rvar option roffset) ireither
 
   type bg_msum = mvar rsum
   with compare, sexp_of
@@ -262,6 +266,12 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
         r.r_fun_cnt <- r.r_fun_cnt + 1;
         S.new_f r_ctx s (Type.count_arrows t))
 
+  let mvar_to_movar v o =
+    match v, o with 
+      | W_Real x, W_Real o -> W_Real (Some x, o)
+      | W_Int x, W_Int o -> W_Int (Some x, o)
+      | _, _ -> raise (Failure "error mvar_to_movar")
+
   let ivar_of_iid {r_ctx; r_ivar_m; r_iid_m} x =
     Hashtbl.find_or_add r_ivar_m x
       ~default:(fun () ->
@@ -326,29 +336,40 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
 	    | P.S_Int (c,t) -> (
 	      let c' = Int63.to_float c in
 	      match ovar_of_flat_term_base_mixed r t with
-		| Some v, x -> 
-		  (c' , v) :: l, Float.(o + c' * x)
-		| None, x ->
+		| W_Int (Some v, x) -> 
+		  (c' , W_Int v) :: l, Float.(o + c' * (Int63.to_float x))
+		| W_Real (Some v, x) -> 
+		  (c' , W_Real v) :: l, Float.(o + c' * x)
+		| W_Int (None, x) ->
+		  l, Float.(o + c' * (Int63.to_float x))
+		| W_Real (None, x) ->
 		  l, Float.(o + c' * x))
 	    | P.S_Real (c, t) -> (
 	      match ovar_of_flat_term_base_mixed r t with
-		| Some v, x -> 
-		  (c , v) :: l, Float.(o + c * x)
-		| None, x ->
+		| W_Int (Some v, x) -> 
+		  (c , W_Int v) :: l, Float.(o + c * (Int63.to_float x))
+		| W_Real (Some v, x) -> 
+		  (c , W_Real v) :: l, Float.(o + c * x)
+		| W_Int (None, x) -> 
+		  l, Float.(o + c * (Int63.to_float x))
+		| W_Real (None, x) ->
 		  l, Float.(o + c * x))
 	  and init = [], Float.zero in
 	  List.fold_left ~init ~f l) in
     l, Float.(o' + o)
       
-
   and iexpr_of_flat_term r = function
     | P.G_SumM s -> let l, o = iexpr_of_sum_mixed r s in
 		    (LP_Mix l), o
     | P.G_Base b ->
      (match ovar_of_flat_term_base_mixed r b with
-      | Some v, x ->
-        (LP_Mix [Float.(1.0), v]), x
-      | None, x ->
+      | W_Int (Some v , x) ->
+        (LP_Mix [Float.(1.0), W_Int v]), (Int63.to_float x)
+      | W_Real (Some v, x) ->
+        (LP_Mix [Float.(1.0), W_Real v]), x
+      | W_Int (None,x) ->
+	(LP_Mix []), (Int63.to_float x)
+      | W_Real (None, x) ->
         (LP_Mix []), x)
     | P.G_Sum s -> let l, o = iexpr_of_sum r s in    
                    (LP_Int l), (Int63.to_float o)
@@ -408,7 +429,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     and default () = S.new_ivar r_ctx t in
     let v = Hashtbl.find_or_add r_call_m (f, l) ~default in
     S.add_call r_ctx (Some v, Int63.zero) f l;
-    (W_Int v)
+    (v)
 
   and blast_ite_branch ({r_ctx} as r) xv v e =
     let l, o = iexpr_of_flat_term r e in
@@ -445,6 +466,7 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
         Some v, Int63.zero in
     Hashtbl.find_or_add r_ovar_of_iite_m i ~default
 
+
   and ovar_of_ite_mixed ({r_ctx; r_orvar_of_iite_m} as r) ((g,s,t) as i) = 
     let default () =
       match xvar_of_formula_doit r g with
@@ -453,15 +475,15 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
       | S_Neg None ->
         ovar_of_term_mixed r t
       | S_Pos (Some bv) ->
-        let v = W_Real (S.new_rvar r_ctx None None) in
-        mixed_blast_ite_branch r (S_Pos bv) v s;
-        mixed_blast_ite_branch r (S_Neg bv) v t;
-        Some v, Float.zero
+        let v = (S.new_rvar r_ctx None None) in
+        mixed_blast_ite_branch r (S_Pos bv) (W_Real v) s;
+        mixed_blast_ite_branch r (S_Neg bv) (W_Real v) t;
+        W_Real (Some v, Float.zero)
       | S_Neg (Some bv) ->
-        let v = W_Real (S.new_rvar r_ctx None None) in
-        mixed_blast_ite_branch r (S_Neg bv) v s;
-        mixed_blast_ite_branch r (S_Pos bv) v t;
-        Some v, Float.zero in
+        let v = (S.new_rvar r_ctx None None) in
+        mixed_blast_ite_branch r (S_Neg bv) (W_Real v) s;
+        mixed_blast_ite_branch r (S_Pos bv) (W_Real v) t;
+        W_Real (Some v, Float.zero) in
     Hashtbl.find_or_add r_orvar_of_iite_m i ~default
 
   and ovar_of_flat_term_base r = function
@@ -475,17 +497,19 @@ module Make (S : Imt_intf.S_access) (I : Id.Accessors) = struct
     | P.B_Ite i ->
       ovar_of_ite r i
 
-  and ovar_of_flat_term_base_mixed r = function
-    | P.B_IVar v  ->
-      Some (W_Int (ivar_of_iid r v)), Float.zero
-    | P.B_RVar v -> 
-      Some (W_Real (rvar_of_rid r v)), Float.zero
-    | P.B_Formula g -> 
-      ovar_of_formula_mixed r g
-    | P.B_App (f_id, l) -> 
-      Some (mixed_var_of_app r f_id l mip_type_real), Float.zero
-    | P.B_Ite i -> 
-      ovar_of_ite_mixed r i
+  and ovar_of_flat_term_base_mixed : ctx -> P.term_base -> movar =
+    fun (r : ctx) (f : P.term_base) ->
+      match f with
+	| P.B_IVar v  ->
+	  W_Int (Some (ivar_of_iid r v), Int63.zero)
+	| P.B_RVar v -> 
+	  W_Real (Some (rvar_of_rid r v), Float.zero)
+	| P.B_Formula g -> 
+	  ovar_of_formula_mixed r g
+	| P.B_App (f_id, l) -> 
+	  W_Int (Some (mixed_var_of_app r f_id l mip_type_real), Int63.zero)
+	| P.B_Ite i -> 
+	  ovar_of_ite_mixed r i
         
   and ovar_of_term ({r_ctx; r_var_of_sum_m} as r) = function
     | P.G_Base b ->
@@ -512,18 +536,20 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | P.G_SumM s ->
       (match iexpr_of_sum_mixed r s with
       | [], o ->
-        None, o
-      | [c, x], o when Float.(c = Float.(1.0)) ->
-        Some x, o
+        W_Real (None, o)
+   (*   | [c, W_Int x], o when Float.(c = Float.(1.0)) ->
+        W_Int (Some x), o *)
+      | [c, W_Real x], o when Float.(c = Float.(1.0)) ->
+        W_Real (Some x, o)     
       | l, o ->
         let v =
           let default () =
             let v = W_Real (S.new_rvar r_ctx None None) in
-	    let l' =  LP_Mix ((Float.(-1.0), v) :: l) in
+	    let l' =  ((Float.(-1.0), v) :: l) in
             S.add_real_eq r_ctx l' Float.zero;
             v in
           Hashtbl.find_or_add r_rvar_of_rsum_m l ~default in
-        Some v, o)
+        (mvar_to_movar  v (W_Real o)))
     | P.G_Sum s -> raise (Failure "Invalid case for MILP")     
 
   and ovar_of_formula ({r_ctx} as r) g =
@@ -539,12 +565,13 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
   and ovar_of_formula_mixed ({r_ctx} as r) g =
     match xvar_of_formula_doit r g with
       | S_Pos (Some v) ->
-	Some (W_Int (S.ivar_of_bvar v)), Float.zero                  
+	W_Int (Some (S.ivar_of_bvar v), Int63.zero              )
       | S_Pos None -> 
-	None, Float.zero
+	W_Int (None, Int63.zero)
       | S_Neg v ->
-	(let f v = W_Int (S.ivar_of_bvar (S.negate_bvar r_ctx v))  in
-	 Option.map v ~f), Float.zero
+	let f v = S.ivar_of_bvar (S.negate_bvar r_ctx v) in
+	W_Int (Option.map v ~f, Int63.zero)
+	
 
   and ovar_of_ibeither ({r_ctx} as r) = function
     | D_Int (P.G_Base b) ->
@@ -570,31 +597,33 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     | D_Int (P.G_Sum s) ->
       (match iexpr_of_sum r s with
       | [], o ->
-        None, (Int63.to_float o)
-      | [c, x], o when Int63.(c = Int63.one) ->
-        Some (W_Int x), (Int63.to_float o)
+        W_Int (None, o)
+(* | [c, x], o when Int63.(c = Int63.one) ->
+(W_Int (Some x, o)) *)
       | l, o ->
         let v = S.new_ivar r_ctx mip_type_int in
         S.add_eq r_ctx ((Int63.minus_one, v) :: l) (Int63.neg o);
-        Some (W_Int v), Float.zero)
+        (W_Int (Some v, Int63.zero)))
     | D_Int (P.G_SumM _) -> raise (Failure "ovar_of_ibreither: Invalid case for MILP")
     | D_Bool g -> let x,o = ovar_of_formula r g in
 		  (match x with
-	            | (Some v) -> Some (W_Int v), (Int63.to_float o)
-		    | None   -> None, Int63.to_float o)
+	            | (Some v) -> W_Int (Some v, o)
+		    | None   -> W_Int (None, o))
     | D_Real (P.G_Base b) -> 
       ovar_of_flat_term_base_mixed r b
     | D_Real (P.G_SumM s) -> 
       (match iexpr_of_sum_mixed r s with
-	|[], o ->
-	  None, o
-	|[c, x], o when Float.(c = Float.(1.0)) ->
-	  Some x, o
-	|l,o ->
+	| [], o ->
+	  W_Real (None, o)
+(*	| [c, W_Int x], o when Float.(c = Float.(1.0)) ->
+	  W_Int (Some x), o *)
+	| [c, W_Real x], o when Float.(c = Float.(1.0)) ->
+	  W_Real (Some x, o)
+	| l,o ->
 	  let v = W_Real (S.new_rvar r_ctx None None) in
-	  let l' = LP_Mix ((Float.(-1.0), v) :: l) in
+	  let l' = ((Float.(-1.0), v) :: l) in
 	  S.add_real_eq r_ctx l' (Float.neg o);
-	  Some v, Float.zero)
+	  (mvar_to_movar v (W_Real Float.zero)))
     | D_Real (P.G_Sum s)  -> raise (Failure "ovar_of_ibreither: Invalid case for MILP")
 
   and blast_atom ({r_ctx} as r) = function
@@ -691,7 +720,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     S.add_eq r_ctx [Int63.one, v] c
 
   let assert_mvar_equal_constant {r_ctx} v c =
-    S.add_real_eq r_ctx (LP_Mix [Float.(1.0), v]) c
+    S.add_real_eq r_ctx [Float.(1.0), v] c
 
   let assert_mvar_le_constant {r_ctx} v c =
     S.add_real_le r_ctx (LP_Mix [Float.(1.0), v]) c
@@ -725,7 +754,7 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       S.add_real_le r_ctx (LP_Mix l) (Float.neg o)
     |P.U_Atom (P.G_SumM s, O'_MEq) ->
       let l,o = iexpr_of_sum_mixed r s in
-      S.add_real_eq r_ctx (LP_Mix l) (Float.neg o)
+      S.add_real_eq r_ctx l (Float.neg o)
     | P.U_Atom (P.G_Base a, O'_Le) ->
       (match ovar_of_flat_term_base r a with
       | None, o when Int63.(o > zero) ->
@@ -744,20 +773,28 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
         assert_ivar_equal_constant r v (Int63.neg o))
     | P.U_Atom (P.G_Base a, O'_MEq) ->
       (match ovar_of_flat_term_base_mixed r a with
-	| None, o when Float.(o = zero) ->
+	| W_Real (None,o) when Float.(o = zero) ->
 	  ()
-	| None, _ ->
+	| W_Int (None, o) when Int63.(o = zero) -> 
+	  ()
+	| (W_Real (None,_) | W_Int (None,_)) ->
 	  r.r_unsat <- true
-	| Some v, o ->
-	  assert_mvar_equal_constant r v (Float.neg o))
+	| W_Int (Some v, o) ->
+	  assert_mvar_equal_constant r (W_Int v) (Float.neg (Int63.to_float o))
+	| W_Real (Some v, o) ->
+	  assert_mvar_equal_constant r (W_Real v) (Float.neg o))
     | P.U_Atom (P.G_Base a, O'_MLe) ->
       (match ovar_of_flat_term_base_mixed r a with
-	| None, o when Float.(o > zero) ->
+	| W_Real (None,o) when Float.(o > zero) ->
 	  r.r_unsat <- true
-	| None, _ ->
+	| W_Int (None, o) when Int63.(o > zero) ->
+	  r.r_unsat <- true
+	| (W_Real (None, _) | W_Int (None, _)) ->
 	  ()
-	| Some v, o -> 
-	  assert_mvar_le_constant r v (Float.neg o))
+	| W_Int (Some v, o) ->
+	  assert_mvar_le_constant r (W_Int v) (Float.neg (Int63.to_float o))
+	| W_Real (Some v, o) ->
+	  assert_mvar_le_constant r (W_Real v) (Float.neg o))
     | g ->
       finally_assert_unit r (xvar_of_formula_doit r g)
 

@@ -16,12 +16,12 @@ let double =
 
 type ii = (
   Int,
-  Int
+  Real
 ) Schema ;;
 
 let db =
   let f i =
-    let j = if double then 2 * i else i + 1 in
+    let j = if double then (2.0 *. to_float(i)) else (to_float(i) +. 1.0 in
     make_row_ii (toi i, toi j) in
   make_db_ii
     (match List.init n ~f with

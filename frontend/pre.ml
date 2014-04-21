@@ -40,15 +40,23 @@ module Make (I : Id.Accessors) = struct
      | S_Int of Int63.t * term_base
      | S_Real of Float.t * term_base
    
-
+  and mixed_sumt2 = 
+      (Int63.t, Float.t) ireither * mixed_term_base
+    
   and sum =
     sumt list
 
   and mixed_sum =
     mixed_sumt list
 
+  and mixed_sum2 = 
+      mixed_sumt2 list
+
   and iite =
     formula * term * term
+
+  and mixed_ite =
+      mixed_formula * mixed_term * mixed_term
 
   and term_base =
   | B_IVar      of  (I.c, int) Id.t
@@ -57,11 +65,21 @@ module Make (I : Id.Accessors) = struct
   | B_App      of  app
   | B_Ite      of  iite
 
+  and mixed_term_base =
+    | M_IVar of (I.c, int) Id.t
+    | M_RVar of (I.c, float) Id.t
+    | M_Formula of formula
+    | M_App of app
+    | M_Ite of mixed_ite
+
   and term =
   | G_Base   of  term_base
   | G_Sum    of  sum  Terminology.offset 
   | G_SumM   of  mixed_sum Terminology.roffset
   
+  and mixed_term =
+    | M_Base of mixed_term_base
+    | M_Sum  of mixed_sum2 Terminology.roffset
 
   and bite = formula * formula * formula
 
@@ -74,6 +92,19 @@ module Make (I : Id.Accessors) = struct
   | U_And   of  conj
   | U_App   of  app
   | U_Ite   of  bite
+
+  and mixed_bite = mixed_formula * mixed_formula * mixed_formula
+
+  and mixed_conj = mixed_formula list
+
+  and mixed_formula = 
+    | MU_Var   of  (I.c, bool) Id.t
+    | MU_Atom  of  mixed_term * op'
+    | MU_Not   of  mixed_formula
+    | MU_And   of  mixed_conj
+    | MU_App   of  app
+    | MU_Ite   of  mixed_bite
+
 
   with compare, sexp_of
 
@@ -95,6 +126,13 @@ module Make (I : Id.Accessors) = struct
     sexp_of_t = sexp_of_mixed_sum
   }
 
+  let hashable_mixed_sum2 = {
+    Hashtbl.Hashable.
+    compare = compare_mixed_sum2;
+    hash = Hashtbl.hash;
+    sexp_of_t = sexp_of_mixed_sum2
+  }
+
   let hashable_args = {
     Hashtbl.Hashable.
     compare = compare_args;
@@ -107,6 +145,13 @@ module Make (I : Id.Accessors) = struct
     compare = compare_iite;
     hash = Hashtbl.hash;
     sexp_of_t = sexp_of_iite
+  }
+
+  let hashable_mixed_ite = {
+    Hashtbl.Hashable.
+    compare = compare_mixed_ite;
+    hash = Hashtbl.hash;
+    sexp_of_t = sexp_of_mixed_ite
   }
 
   let hashable_bite = {
@@ -144,8 +189,10 @@ module Make (I : Id.Accessors) = struct
 
     s_sum_h         :  (sum, sum) Hashtbl.t;
     s_mixed_sum_h   :  (mixed_sum, mixed_sum) Hashtbl.t;   (* mixed int/float type*)
+    s_mixed_sum2_h  :  (mixed_sum2, mixed_sum2) Hashtbl.t;
     s_args_h        :  (args, args) Hashtbl.t;
     s_iite_h        :  (iite, term_base) Hashtbl.t;
+    s_mite_h        :  (mixed_ite, mixed_term_base) Hashtbl.t;
     s_bite_h        :  (bite, formula) Hashtbl.t;
     s_conj_h        :  (conj, formula) Hashtbl.t;
   
@@ -168,8 +215,10 @@ module Make (I : Id.Accessors) = struct
   let make_sharing_ctx () = {
     s_sum_h        = Hashtbl.create () ~size:2048 ~hashable:hashable_sum;
     s_mixed_sum_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_mixed_sum;
+    s_mixed_sum2_h  = Hashtbl.create () ~size:2048 ~hashable:hashable_mixed_sum2;
     s_args_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_args;
     s_iite_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_iite;
+    s_mite_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_mixed_ite;
     s_bite_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_bite;
     s_conj_h       = Hashtbl.create () ~size:2048 ~hashable:hashable_conj;
   }
@@ -281,6 +330,14 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
       | (c,v) :: xs -> 
 	(S_Int (c,v)) :: (make_mixed k xs)
 
+   let rec make_mixed2 k l =
+    match l with
+      | [] -> []
+      | (c, v) :: xs when k <> Float.(1.0) ->
+	(W_Real Float.(k * (Int63.to_float c)), v) :: (make_mixed2 k xs)
+      | (c, v) :: xs ->
+	(W_Int c, v) :: (make_mixed2 k xs)
+
 
  let make_sum {r_sharing = {s_sum_h}} l o =
     let l = dedup_sum l in
@@ -296,6 +353,10 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
   let make_iite {r_sharing = {s_iite_h}} a b c =
     let i = a, b, c in
     Hashtbl.find_or_add s_iite_h i ~default:(fun () -> B_Ite i)
+
+  let make_mixed_ite {r_sharing = {s_mite_h}} a b c =
+    let i = a, b, c in
+    Hashtbl.find_or_add s_mite_h i ~default:(fun () -> M_Ite i)
 
   let make_bite {r_sharing = {s_bite_h}} a b c =
     let i = a, b, c in
@@ -332,6 +393,14 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | g ->
       U_Not g
 
+  let rec mixed_negate = function
+    | MU_Not MU_Not g ->
+      mixed_negate g
+    | MU_Not g ->
+      g
+    | g ->
+      MU_Not g
+
 
 (*This function expects to receive G_Sum or G_Base. We shouldn't have comparison between G_Sum and G_SumM*)
    let equal_modulo_offset a b =
@@ -354,6 +423,36 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
         Int63.(o1 - o2)
     | _ ->
       None
+
+   let equal_mixed_modulo_offset (a : mixed_term) (b : mixed_term) =
+     match a, b with
+       | M_Base b1, M_Base b2 ->
+	 Option.some_if
+           (compare_mixed_term_base b1 b2 = 0)
+           Float.zero
+       | M_Sum ([W_Int c, b1], o), M_Base b2 ->
+	 Option.some_if
+           (c = Int63.one && compare_mixed_term_base b1 b2 = 0)
+           o
+       | M_Sum ([W_Real c, b1], o), M_Base b2 ->
+	 Option.some_if
+           (c = Float.(1.0) && compare_mixed_term_base b1 b2 = 0)
+           o
+       | M_Base b2, M_Sum ([W_Real c, b1], o) ->
+	 Option.some_if
+           (c = Float.(1.0) && compare_mixed_term_base b1 b2 = 0)
+           (Float.neg o)
+       | M_Base b2, M_Sum ([W_Int c, b1], o) ->
+	 Option.some_if
+           (c = Int63.one && compare_mixed_term_base b1 b2 = 0)
+           (Float.neg o)
+       | M_Sum (s1, o1), M_Sum (s2, o2) ->
+	 Option.some_if
+           (compare_mixed_sum2 s1 s2 = 0)
+           Float.(o1 - o2)
+       | _ ->
+	 None
+
 
 (*Similar to the above but here we expect G_Base and G_SumM*)
  let equal_modulo_real_offset a b =
@@ -399,6 +498,16 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | G_Sum (l,o) -> 
       make_mixed (Float.(1.0)) l, (Int63.to_float o)
 
+  let sum_of_mixed_term' (s : mixed_term) = 
+    match s with
+      | M_Base b ->
+	[W_Real Float.(1.0), b], Float.zero
+      | M_Sum s ->
+	s
+      
+
+
+
   let is_bounding = function
     | U_Not (U_Atom (s, O'_Eq)) :: d ->
       List.for_all d
@@ -409,6 +518,18 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
           false)
     | _ ->
       false
+
+  let is_mixed_bounding = function
+    | MU_Not (MU_Atom (s, O'_Eq)) :: d ->
+      List.for_all d
+        ~f:(function
+        | MU_Not (MU_Atom (s2, O'_Eq)) ->
+          Option.is_some (equal_mixed_modulo_offset s s2)
+        | _ ->
+          false)
+    | _ ->
+      false
+
 
   let get_bounding l =
     if not (is_bounding l) then
@@ -443,6 +564,36 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
       assert(Float.(lb <= ub));
       Some (s, lb, ub, ub = Float.(lb + length - (1.0)))
 
+let get_mixed_bounding l =
+    if not (is_mixed_bounding l) then
+      None
+    else
+      let s = match l with
+ 	| MU_Not (MU_Atom (M_Sum (s, _), _)) :: _ ->
+	  s
+        | MU_Not (MU_Atom (M_Base b, _)) :: _ ->
+          [W_Real (Float.(1.0)), b]
+        | _ ->
+          raise (Unreachable.Exn _here_)
+      and l =
+        let f acc = function
+          | MU_Not (MU_Atom (M_Base _, _)) ->
+            Float.zero :: acc
+ 	  | MU_Not (MU_Atom (M_Sum (_,d), _)) ->
+	    d :: acc
+          | _ ->
+            acc
+        and init = []
+        and cmp = Float.compare in
+        List.sort (List.fold_left l ~init ~f) ~cmp in
+      let first = List.hd_exn l
+      and last = List.last_exn l
+      and length = Float.of_int (List.length l) in
+      let lb = Float.neg last and ub = Float.neg first in
+      assert(Float.(lb <= ub));
+      Some (s, lb, ub, ub = Float.(lb + length - (1.0)))
+
+
   let maybe_resolve r g h =
     let ret f g h = Some (f, negate g, negate h) in
     match g, h with
@@ -461,6 +612,28 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | _, _ ->
       None
 
+let maybe_resolve_mixed 
+     r
+    (g : mixed_formula) 
+    (h : mixed_formula) =
+    let ret f g h = Some (f, mixed_negate g, mixed_negate h) in
+    match g, h with
+    | MU_Not (MU_And [g1; g2]), MU_Not (MU_And [h1; h2]) ->
+      (let h1' = mixed_negate h1 and h2' = mixed_negate h2 in
+       if compare_mixed_formula g1 h1' = 0 then
+         ret g1 g2 h2
+       else if compare_mixed_formula g1 h2' = 0 then
+         ret g1 g2 h1
+       else if compare_mixed_formula g2 h1' = 0 then
+         ret g2 g1 h2
+       else if compare_mixed_formula g2 h2' = 0 then
+         ret g2 g1 h1
+       else
+         None)
+    | _, _ ->
+      None
+
+
   let rec flatten_args :
   type s t . ctx -> ibflat list -> (I.c, s -> t) M.t -> app =
     fun r acc -> function
@@ -475,6 +648,23 @@ A new sorting criteria is defined so that S_Int and S_Real for any term_base rem
     | G_Sum (l, o) -> 
       List.rev_map_append l d ~f:(Tuple2.map1 ~f:(Int63.( * ) k)), Int63.(x + o * k)
     | _ -> raise (Failure "inline integer term: unexpected sum case")
+
+  and inline_mixed_term 
+    (r :ctx)
+    (d, xr)
+    (k : float)
+    (s : mixed_term) = 
+      match s with 
+	| M_Base b -> ((W_Real k), b) :: d, xr
+	| M_Sum (l, ro) -> 
+	  let apply = (function
+	    | W_Int c, v when Float.(k <> 1.0) ->
+	      W_Real (Float.((Int63.to_float c) * k)), v
+	    | W_Int c, v ->
+	      W_Int c, v
+	    | W_Real c, v ->
+	      W_Real (c *. k), v) in
+	  List.rev_map_append l d ~f:apply, Float.(xr + ro * k)
 
   
 and inline_term_real r (d, xr) k = function
@@ -544,6 +734,32 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
       let d, xr = flatten_mixed_term_sum r (d, xr) (1.0) t in
       G_SumM (make_mixed_sum r d xr)
     
+
+  (*and flatten_mixed_term_sum2 r (d, xr) k = function
+    | M.M_Var v -> (W_Real k, M_RVar v) :: d, xr
+    | M.M_Real i -> d, Float.(xr + k * i)
+    | M.M_ROI i -> let d_aux, xi_aux = flatten_int_term_sum r ([],Int63.zero) Int63.one i in
+		   let xr_new = Float.((Int63.to_float xi_aux) * k + xr) in
+		   (List.append d (make_mixed2 k d_aux)), xr_new
+    | M.M_App (f, t) ->
+      let a = flatten_args r [flatten_term r t] f in
+      (W_Real k, M_App a) :: d, xr
+    | M.M_RSum (s, t) ->
+      let d, xr = flatten_mixed_term_sum2 r (d, xr) k s in
+      flatten_mixed_term_sum2 r (d, xr) k t
+    | M.M_RProd(k', t) ->
+      flatten_mixed_term_sum2 r (d, xr) Float.(k *. k') t
+    | M.M_RIte (c, s, t) ->
+      let c = flatten_formula r c
+      and s = flatten_mixed_term r s 
+      and t = flatten_mixed_term r t in
+      (match equal_mixed_modulo_offset s t with
+	| Some o ->
+	  let d, xr = inline_mixed_term r (d, xr) k t in  
+	  (W_Real Float.(k *. o), M_Formula c) :: d, xr
+	| None ->
+	  (W_Real k, make_mixed_ite r c s t) :: d, xr)
+  *)
 
  and flatten_mixed_term_sum r (d, xr) k = function
     | M.M_Var v -> (S_Real (k, B_RVar v)) :: d, xr

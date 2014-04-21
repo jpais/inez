@@ -251,9 +251,7 @@ let add_eq ({r_ctx} as r) l o =
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_real_eq ({r_ctx} as r) l o = 
-  let c = (match l with
-            | LP_Int s -> create_constraint r true s o
-	    | LP_Mix s -> create_real_constraint r true s o) in
+  let c =  create_real_constraint r true l o in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
 let add_le ({r_ctx} as r) l o =

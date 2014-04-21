@@ -50,7 +50,7 @@ module type S_with_holes = sig
 
   type rovar = rvar option Terminology.roffset
 
-  type movar = mvar option Terminology.roffset
+  type movar = (ivar option Terminology.offset, rvar option Terminology.roffset) Terminology.ireither 
 
   val compare_ovar : ovar -> ovar -> int
 

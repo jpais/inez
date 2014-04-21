@@ -19,15 +19,19 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     (S'.ovar Lazy.t, S'.xvar Lazy.t) ibeither
 
 (*Added*)
-  type irbentry =       
-      (S'.ovar Lazy.t, S'.movar Lazy.t, S'.xvar Lazy.t) irbeither
+  (*type irbentry =       
+      (S'.ovar Lazy.t, S'.movar Lazy.t, S'.xvar Lazy.t) irbeither*)
+
+  type irbentry = (S'.movar Lazy.t, S'.xvar Lazy.t) ibeither
 
   type table_lazy = S'.ovar list list Lazy.t
 
   type in_constraint_lazy = ibentry list * table_lazy
 
 (* Added *)
-  type irb_constraint_lazy = irbentry list * table_lazy
+  type mixed_table_lazy = S'.movar list list Lazy.t
+
+  type irb_constraint_lazy = irbentry list * mixed_table_lazy
 
   type d_boxed = DBox : (I.c, 's) R.t list -> d_boxed
 
@@ -51,6 +55,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     r_in_m          :  (bool_id, in_constraint_lazy list) Hashtbl.t;
     r_in_m_irb      :  (bool_id, irb_constraint_lazy list) Hashtbl.t;  (* Added *)
     r_smtlib_ctx    :  Smt.ctx option;
+    mutable r_ismixed       :  bool
   }
 
   let make_ctx r_mode =
@@ -68,6 +73,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
         Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
       r_in_m_irb =
 	Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
+      r_ismixed = false;
       r_smtlib_ctx =
         match r_mode with
         | `Smt_out ->
@@ -144,20 +150,20 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
   let force_row_irb {r_ctx} = (* TODO: Check if it's ok to return float *)
     List.map
       ~f:(function
-	| D_Int i -> 
+	| H_Int i -> 
 	  Lazy.force i
-	| D_Real r -> 
-	  Lazy.force r
-	| D_Bool b -> 
+(*	| D_Real r -> 
+	  Lazy.force r *)
+	| H_Bool b -> 
 	  (match Lazy.force b with
 	    | S_Pos (Some b) ->
-	      Some (Imt'.ivar_of_bvar b), Float.zero
+	      W_Int (Some (Imt'.ivar_of_bvar b), Int63.zero)
 	    | S_Neg (Some b) ->
-	      Some (Imt'.ivar_of_bvar (S'.negate_bvar r_ctx b)), Float.zero
+	      W_Int (Some (Imt'.ivar_of_bvar (S'.negate_bvar r_ctx b)), Int63.zero)
 	    | S_Pos None ->
-	      None, Float.zero
+	      W_Int (None, Int63.one)
 	    | S_Neg None ->
-	      None, Float.zero))
+	      W_Int (None, Int63.one)))
  
   type polarity = [ `Positive | `Negative | `Both ]
 
@@ -320,16 +326,17 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
 	match r with
 	  | R.R_Int m ->
 	    let m = C.map_non_atomic m ~f ~fv in
-	    let m = S'.ovar_of_term r_ctx m in
-	    D_Int m :: acc
+	    let m' = Logic.M.M_ROI m in
+	    let m = S'.ovar_of_term_mixed r_ctx m' in
+	    H_Int m :: acc
 	  | R.R_Real m ->
 	    let m = C.map_non_atomic m ~f ~fv in
 	    let m = S'.ovar_of_term_mixed r_ctx m in  
-	    D_Real m :: acc
+	    H_Int m :: acc
 	  | R.R_Bool m ->
             let m = C.map_non_atomic m ~f ~fv in
             let m = S'.xvar_of_term r_ctx m in
-            D_Bool m :: acc
+            H_Bool m :: acc
 	  | R.R_Pair (r1, r2) ->
             let acc = list_of_irb_row_aux acc x r1 in
             list_of_irb_row_aux acc x r2
@@ -473,36 +480,77 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     | _ ->
       S'.assert_formula r_ctx g
 
-  let assert_formula ({r_ctx; r_mode} as x) g =
+  let assert_formula (({r_ctx; r_mode} as x) : ctx) (g: S'.c Db_logic.M.atom Formula.t) =
     match purify_formula_top x g with
     | Some g ->
       assert_formula x g; `Ok
     | None ->
       `Out_of_fragment
 
-  let name_diff r v1 v2 =
+  let name_diff (r:Imt'.ctx) (v1:Imt'.ivar) (v2:Imt'.ivar) =
     let v = Imt'.new_ivar r (T_Int (None, None)) in
     Int63.(Imt'.add_eq r [minus_one, v1; one, v2; one, v] zero);
     v
 
-  let solve ({r_ctx; r_bg_ctx; r_theory_ctx; r_in_m; r_mode;
-              r_smtlib_ctx} as x) =
+  let mixed_name_diff 
+      (r : Imt'.ctx) 
+      (v1: (Imt'.ivar, Imt'.rvar) ireither) 
+      (v2: (Imt'.ivar, Imt'.rvar) ireither) =
+    match v1, v2 with
+      | W_Int v1, W_Int v2 -> 
+	let v = Imt'.new_ivar r (T_Int (None, None)) in
+	Int63.(Imt'.add_eq r [minus_one, v1; one, v2; one, v] zero);
+	(W_Int v)
+      | W_Real v1, W_Real v2 ->
+	let v = Imt'.new_rvar r None None in
+	Float.(Imt'.add_real_eq r [(-1.0), W_Real v1;
+				   ( 1.0), W_Real v2; 
+				   ( 1.0), W_Real v ] zero);
+	(W_Real v)
+      | _, _ -> raise (Failure "Error mixed_name_dif")
+
+  let mixed_register_var
+      (r : Imt'.ctx)
+      (v1 : (Imt'.ivar, Imt'.rvar) ireither) =
+    match v1 with
+      | W_Int v1  -> Imt'.register_ivar r v1
+      | W_Real v1 -> Imt'.register_rvar r v1 
+
+
+  let solve ({r_ctx; r_bg_ctx; r_theory_ctx; r_in_m;r_in_m_irb; r_mode;
+              r_smtlib_ctx; r_ismixed} as x) =
     match r_mode with
     | `Lazy ->
-      let f ~key ~data =
-        let v = S'.bvar_of_id r_ctx key
-        and fd = name_diff r_bg_ctx
-        and frv = Imt'.register_ivar r_bg_ctx in
-        Imt'.register_bvar r_bg_ctx v;
-        let f (e, l) =
-          Dp.assert_membership
-            r_theory_ctx
-            v (force_row x e) (Lazy.force l) ~fd ~frv in
-        List.iter data ~f in
-      Hashtbl.iter r_in_m ~f;
-      let r = S'.solve r_ctx in
-      if !Sys.interactive then Dp.print_stats r_theory_ctx;
-      r
+      if r_ismixed then
+	let f ~key ~data =
+          let v = S'.bvar_of_id r_ctx key
+          and fd = name_diff r_bg_ctx
+          and frv = Imt'.register_ivar r_bg_ctx in
+          Imt'.register_bvar r_bg_ctx v;
+          let f (e, l) =
+            Dp.assert_membership
+              r_theory_ctx
+              v (force_row x e) (Lazy.force l) ~fd ~frv in
+          List.iter data ~f in
+	Hashtbl.iter r_in_m ~f;
+	let r = S'.solve r_ctx in
+	if !Sys.interactive then Dp.print_stats r_theory_ctx;
+	r
+      else
+	let f ~key ~data = 
+	  let v = S'.bvar_of_id r_ctx key
+	  and fd = mixed_name_diff r_bg_ctx
+	  and frv = mixed_register_var r_bg_ctx in
+	  Imt'.register_bvar r_bg_ctx v;
+	  let f (e, l) =
+	    Dp.assert_mixed_membership
+	      r_theory_ctx
+	      v (force_row_irb x e) (Lazy.force l) ~fd ~frv in
+	  List.iter data ~f in
+	Hashtbl.iter r_in_m_irb ~f;
+	let r = S'.solve r_ctx in
+	if !Sys.interactive then Dp.print_stats r_theory_ctx;
+	r
     | `Eager when Hashtbl.is_empty r_in_m ->
       S'.solve r_ctx
     | `Eager ->

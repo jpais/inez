@@ -161,8 +161,13 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   type mvar_bound = (Int63.t option, Float.t option) ireither
   with compare, sexp_of 
 
-  type mixed_row = (Imt.ivar option, Imt.rvar option) ireither offset array
+  (* type mixed_row = (Imt.ivar option, Imt.rvar option) ireither roffset array
   with compare, sexp_of
+  *)
+
+type mixed_row = (Imt.ivar option offset, Imt.rvar option roffset) ireither array
+  with compare, sexp_of
+
 
 (** Represents a table*)
   type mixed_db = mixed_row list
@@ -190,10 +195,10 @@ module Make (Imt : Imt_intf.S_essentials) = struct
   }
 
 (** Index over the table. Each i represents a list of mixed rows whose first column element i *)
-  type mixed_row_map = mixed_row list Int63.Map.t
+  type mixed_row_map = mixed_row list Float.Map.t
   with compare, sexp_of
 
-(** Represents a partitin of the table as follows:
+(** Represents a partition of the table as follows:
 - the first map consists of rows that only have constants (no variables)
 - second map consists of rows whose first element is a constant but have a variable somewhere
 - list of rows that begin with a variable*)
@@ -296,7 +301,7 @@ module Make (Imt : Imt_intf.S_essentials) = struct
 
   let all_concrete_mixed = 
     Array.for_all ~f:(function
-                       | W_Int None, _ | W_Real None, _ -> true
+                       | W_Int (None, _) | W_Real (None, _) -> true
 		       | _ -> false)
 
 let index_of_db_dimension l i =
@@ -312,7 +317,7 @@ let index_of_db_dimension l i =
           accm1, accm2, data :: accl)
 
 
-  let index_of_mixed_db_dimension l i =
+(*  let index_of_mixed_db_dimension l i =
     List.fold_left l
       ~init:(Int63.Map.empty, Int63.Map.empty, [])
       ~f:(fun (accm1, accm2, accl) data ->
@@ -323,6 +328,26 @@ let index_of_db_dimension l i =
           accm1, Map.add_multi accm2 ~key ~data, accl
         | _ ->
           accm1, accm2, data :: accl)
+*)
+
+  let index_of_mixed_db_dimension l i =
+    List.fold_left l
+      ~init:(Float.Map.empty, Float.Map.empty, [])
+      ~f:(fun (accm1, accm2, accl) data ->
+        match Array.get data i with
+	  | W_Int (None, key) when all_concrete_mixed data ->
+	    let key = Int63.to_float key in
+            Map.add_multi accm1 ~key ~data, accm2, accl
+	  | W_Real (None, key) when all_concrete_mixed data ->
+	    Map.add_multi accm1 ~key ~data, accm2, accl
+          | W_Int  (None, key) ->
+	    let key = Int63.to_float key in
+            accm1, Map.add_multi accm2 ~key ~data, accl
+	  | W_Real (None, key) ->
+	    accm1, Map.add_multi accm2 ~key ~data, accl
+          | _ ->
+            accm1, accm2, data :: accl)
+
 
   let index_of_db {r_idb_h} d i =
     let default () = index_of_db_dimension d i in
@@ -384,25 +409,27 @@ let index_of_db_dimension l i =
         | None, None ->
           ())
 
-  let register_mdiffs r row1 row2 ~fd ~frv = 
+  let register_mdiffs r 
+      (row1: mixed_row) 
+      (row2: mixed_row) ~fd ~frv = 
     Array.iter2_exn row1 row2
-      ~f:(fun (v1, _) (v2, _) ->
+      ~f:(fun v1 v2 ->
 	match v1, v2 with
-	  | W_Int (Some x1), W_Int (Some x2) when not (Imt.compare_ivar x1 x2 = 0) ->
+	  | W_Int (Some x1, _), W_Int (Some x2, _) when not (Imt.compare_ivar x1 x2 = 0) ->
 	    let v = var_of_mdiff r (W_Int x1) (W_Int x2) ~fd ~frv in
 	    let v = Option.value_exn v ~here:_here_ in
 	    frv v
-	  | W_Real (Some x1), W_Real (Some x2) when not (Imt.compare_rvar x1 x2 = 0) ->
+	  | W_Real (Some x1, _), W_Real (Some x2, _) when not (Imt.compare_rvar x1 x2 = 0) ->
 	    let v = var_of_mdiff r (W_Real x1) (W_Real x2) ~fd ~frv in
 	    let v = Option.value_exn v ~here:_here_ in
 	    frv v
 	  | W_Int _, W_Real _ | W_Real _ , W_Int _ -> raise (Failure "Unexpected case register_mdiffs")
-	  | W_Int (Some v), _ | _, W_Int (Some v) ->
+	  | W_Int (Some v, _), _ | _, W_Int (Some v, _) ->
 	    frv (W_Int v)
-	  | W_Real (Some v), _ | _, W_Real (Some v) ->
+	  | W_Real (Some v, _), _ | _, W_Real (Some v, _) ->
             frv (W_Real v)
-	  | W_Int None, W_Int None -> ()
-	  | W_Real None, W_Real None -> ()
+	  | W_Int (None, _), W_Int (None, _) -> ()
+	  | W_Real (None,_), W_Real (None,_) -> ()
       )
 
   let assert_membership
@@ -469,7 +496,7 @@ let index_of_db_dimension l i =
       | None, o ->
         Some o
 
-    let lb_of_movar r' = function
+    (*let lb_of_movar r' = function
       | (W_Real (Some v)), o -> 
 	(match (S.get_real_lb_local r' v) with
           | Some x -> W_Real (Some (Float.(x + (Int63.to_float o))))
@@ -492,6 +519,31 @@ let index_of_db_dimension l i =
 	  | _ -> W_Int None)  
       | (W_Int None), o -> (W_Int (Some o))
       | (W_Real None), o -> (W_Real (Some (Int63.to_float o)))
+    *)
+
+let lb_of_movar r' = function
+      | W_Real (Some v, o) -> 
+	(match (S.get_real_lb_local r' v) with
+          | Some x -> W_Real (Some (Float.(x + o)))
+          | _ -> W_Real None)
+      | W_Int (Some v, o) -> 
+	(match (S.get_lb_local r' v) with
+	  | Some x -> W_Int (Some (Int63.(x + o)))
+	  | _ -> W_Int None)  
+      | W_Int (None, o) -> (W_Int (Some o))
+      | W_Real (None, o) -> (W_Real (Some o))
+	
+    let ub_of_movar r' = function
+      | W_Real (Some v, o) -> 
+	(match (S.get_real_ub_local r' v) with
+          | Some x -> W_Real (Some (Float.(x + o)))
+          | _ -> W_Real None)
+      | W_Int (Some v, o) -> 
+	(match (S.get_ub_local r' v) with
+	  | Some x -> W_Int (Some (Int63.(x + o)))
+	  | _ -> W_Int None)  
+      | W_Int (None, o) -> (W_Int (Some o))
+      | W_Real (None, o) -> (W_Real (Some o))
 
 
     let bounds_of_row r' =
@@ -663,37 +715,38 @@ let index_of_db_dimension l i =
      (row2 : mixed_row) =
    let f ov1 ov2 =
      let faux lb ub o1 o2 = 
-       (match lb, ub with
-         | W_Int (Some lb), W_Int (Some ub) ->
-	   Int63.(lb = ub && lb = o2 - o1)
-         | W_Real (Some lb), W_Real (Some ub) ->
-	   Float.(lb = ub && lb = Int63.to_float(o2) - Int63.to_float(o1))
-	 | _, _ ->
+       (match lb, ub, o1, o2 with
+         | W_Int (Some lb), W_Int (Some ub), W_Int o1, W_Int o2 ->
+	   Int63.(lb = ub) && Int63.(lb = o2 - o1)
+         | W_Real (Some lb), W_Real (Some ub), W_Real o1, W_Real o2 ->
+	   Float.(lb = ub && lb = o2 - o1)
+	 | _, _, _, _ ->
 	   false) in
      (match ov1, ov2 with
-       | (W_Int (Some v1), o1), (W_Int (Some v2), o2) ->
+       | W_Int (Some v1, o1), W_Int (Some v2, o2) ->
          let lb = lb_of_mdiff r r' (W_Int v1) (W_Int v2)
          and ub = ub_of_mdiff r r' (W_Int v1) (W_Int v2) in
-         faux lb ub o1 o2	      
-       | (W_Int (Some v1), o1), (W_Int None, o2)
-       | (W_Int None, o2), (W_Int (Some v1), o1) ->
+         faux lb ub (W_Int o1) (W_Int o2)	      
+       | W_Int (Some v1, o1), W_Int (None, o2)
+       | W_Int (None, o2), W_Int (Some v1, o1) ->
 	 let lb = lb_of_mdiff_aux r' (W_Int v1)
          and ub = ub_of_mdiff_aux r' (W_Int v1) in
-	 faux lb ub o1 o2
-       | (W_Real (Some v1), o1), (W_Real (Some v2), o2) ->
+	 faux lb ub (W_Int o1) (W_Int o2)
+       | W_Real (Some v1, o1), W_Real (Some v2, o2) ->
          let lb = lb_of_mdiff r r' (W_Real v1) (W_Real v2)
          and ub = ub_of_mdiff r r' (W_Real v1) (W_Real v2) in
-	 faux lb ub o1 o2
-       | (W_Real (Some v1), o1), (W_Real None, o2)
-       | (W_Real None, o2), (W_Real (Some v1), o1) ->
+	 faux lb ub (W_Real o1) (W_Real o2)
+       | W_Real (Some v1, o1), W_Real (None, o2)
+       | W_Real (None, o2), W_Real (Some v1, o1) ->
 	 let lb = lb_of_mdiff_aux r' (W_Real v1)
          and ub = ub_of_mdiff_aux r' (W_Real v1) in
-         faux lb ub o1 o2
-       | (W_Int None, o1), (W_Int None, o2) 
-       | (W_Real None, o1), (W_Real None, o2)->
-         Int63.(o1 = o2)
-       | (W_Int _, _) , (W_Real _, _) 
-       | (W_Real _, _), (W_Int _, _) ->
+         faux lb ub (W_Real o1) (W_Real o2)
+       | W_Int (None, o1), W_Int (None, o2) ->
+	 Int63.(o1 = o2)
+       | W_Real (None, o1), W_Real (None, o2)->
+         Float.(o1 = o2)
+       | W_Int _ , W_Real _ 
+       | W_Real _, W_Int _ ->
 	 raise (Failure "Unexpected comparison equal_mixed_row")) in
    Array.for_all2_exn row1 row2 ~f
 
@@ -724,21 +777,21 @@ let index_of_db_dimension l i =
         (Array.for_all2_exn row row'
            ~f:(fun ov1 ov2 ->
 	     let ge_mixed dif = (function
-	       | W_Int (Some x) -> Int63.(>=) dif x
-	       | W_Real (Some x) -> Float.(>=) (Int63.to_float dif) x
+	       | W_Int (Some x) -> Float.(>=) dif (Int63.to_float x)
+	       | W_Real (Some x) -> Float.(>=) dif x
 	       | _ -> true)	    
 	     and le_mixed dif = (function
-	       | W_Int (Some x)  -> Int63.(<=) dif x
-	       | W_Real (Some x) -> Float.(<=) (Int63.to_float dif) x
+	       | W_Int (Some x)  -> Float.(<=) dif (Int63.to_float x)
+	       | W_Real (Some x) -> Float.(<=) dif x
 	       | _ -> true) in
              match ov1, ov2 with
-               | (W_Int (Some v1), o1), (W_Int (Some v2), o2) ->
-		 let d = Int63.(o2 - o1)
+               | W_Int (Some v1, o1), W_Int (Some v2, o2) ->
+		 let d = Int63.(to_float(o2 - o1))
 		 and lb = lb_of_mdiff r r' (W_Int v1) (W_Int v2)
 		 and ub = ub_of_mdiff r r' (W_Int v1) (W_Int v2) in    
 		 (ge_mixed d lb) && (le_mixed d ub)
-	       | (W_Real (Some v1), o1), (W_Real (Some v2), o2) ->
-		 let d = Int63.(o2 - o1)
+	       | W_Real (Some v1, o1), W_Real (Some v2, o2) ->
+		 let d = Float.(o2 - o1)
 		 and lb = lb_of_mdiff r r' (W_Real v1) (W_Real v2)
 		 and ub = ub_of_mdiff r r' (W_Real v1) (W_Real v2) in    
 		 (ge_mixed d lb) && (le_mixed d ub)
@@ -820,15 +873,15 @@ let index_of_db_dimension l i =
 (** These functions extract a minimun/maximum given an iroption. For the cases None, the just returnmax/min value. Check if it's ok for the float case to return an integer. I understand that this won't affect the mapping but check again *)
   let extract_min (lb : mvar_bound) =
       match lb with
-	| W_Int  (Some x) -> x
-	| W_Real (Some x) -> Int63.of_int (Float.iround_down_exn x)
-	| W_Int None | W_Real None -> Int63.min_value
+	| W_Int  (Some x) -> Int63.to_float x
+	| W_Real (Some x) -> x
+	| W_Int None | W_Real None -> Float.min_value
 
     let extract_max (ub: mvar_bound) = 
       match ub with
-	| W_Int  (Some x) -> x
-	| W_Real (Some x) -> Int63.of_int (Float.iround_down_exn x)
-	| W_Int None | W_Real None -> Int63.max_value 
+	| W_Int  (Some x) -> Int63.to_float x
+	| W_Real (Some x) -> x
+	| W_Int None | W_Real None -> Float.max_value 
 
   let fold_mixed_constant_candidates
         ({r_stats; r_mixbounds_h} as r)
@@ -951,19 +1004,19 @@ let index_of_db_dimension l i =
 	(r : ctx) 
 	(r':S.ctx)
 	(ub: mvar_bound)
-	(v, o) =
+	 v =
       match ub, v with
 	| W_Int  None, (W_Int _) -> `Ok
 	| W_Real None, (W_Real _) -> `Ok
-	| W_Int (Some ub), W_Int (Some v) ->
+	| W_Int (Some ub), W_Int (Some v, o) ->
 	  S.set_ub_local r' v Int63.(ub - o)
-	| W_Real (Some ub), W_Real (Some v) ->
-	  S.set_real_ub_local r' v Float.(ub - (Int63.to_float o))
-	| W_Int (Some ub), W_Int None ->
+	| W_Real (Some ub), W_Real (Some v, o) ->
+	  S.set_real_ub_local r' v Float.(ub - o)
+	| W_Int (Some ub), W_Int (None, o) ->
 	  if Int63.(ub >= o) then `Ok else `Infeasible
-	| W_Real (Some ub), W_Real None ->
-	  if Float.(ub >= (Int63.to_float o)) then `Ok else `Infeasible
-	| _, _ -> raise (Failure "Unreachable case maybe_mixed_upper_bound_ovar")
+	| W_Real (Some ub), W_Real (None, o) ->
+	  if Float.(ub >= o) then `Ok else `Infeasible
+	| _, _ -> raise (Unreachable.Exn _here_)
 
 
     let maybe_lower_bound_ovar r r' lb (v, o) =
@@ -979,19 +1032,19 @@ let index_of_db_dimension l i =
 	(r : ctx) 
 	(r':S.ctx)
 	(lb: mvar_bound)
-	(v, o) =
+	v =
       match lb, v with
 	| W_Int None , (W_Int _) -> `Ok
 	| W_Real None, (W_Real _) -> `Ok
-	| W_Int (Some lb), W_Int (Some v) ->
+	| W_Int (Some lb), W_Int (Some v, o) ->
 	  S.set_lb_local r' v Int63.(lb - o)
-	| W_Real (Some lb), W_Real (Some v) ->
-	  S.set_real_lb_local r' v Float.(lb - (Int63.to_float o))
-	| W_Int (Some lb), W_Int None ->
+	| W_Real (Some lb), W_Real (Some v, o) ->
+	  S.set_real_lb_local r' v Float.(lb - o)
+	| W_Int (Some lb), W_Int (None, o) ->
 	  if Int63.(lb <= o) then `Ok else `Infeasible
-	| W_Real (Some lb), W_Real None ->
-	  if Float.(lb <= (Int63.to_float o)) then `Ok else `Infeasible
-	| _, _ -> raise (Failure "Unreachable case maybe_mixed_upper_bound_ovar")
+	| W_Real (Some lb), W_Real (None, o) ->
+	  if Float.(lb <= o) then `Ok else `Infeasible
+	| _, _ -> raise (Unreachable.Exn _here_)
 
 
     let foldi_responses_occs {r_occ_h} v ~f =
@@ -1263,18 +1316,18 @@ let index_of_db_dimension l i =
             a.(i) <- (map2 lb lb' (Int63.min) (Float.min),
 		      map2 ub ub' (Int63.max) (Float.max))
 	);
-      let equal =
-        let eq1 v1 v2 = (match v1, v2 with
-	  | W_Int v1, W_Int v2 -> 
-	    Option.equal (fun x1 x2 -> Imt.compare_ivar x1 x2 = 0) v1 v2                          
-          | W_Real v1, W_Real v2 -> 
-	    Option.equal (fun x1 x2 -> Imt.compare_rvar x1 x2 = 0) v1 v2
-	  | _, _ -> false)
-        and eq2 = Int63.equal in
-        let equal = Tuple2.equal ~eq1 ~eq2 in
-        Array.equal ~equal
-      and s = s || equal_mixed_row r r' witness_row row in
-      a, Zom.update z row ~equal, s
+   let equal =
+     let equal v1 v2 = 
+       (match v1, v2 with
+	 | W_Int (v1,o1), W_Int (v2,o2) -> 
+	   Option.equal (fun x1 x2 -> Imt.compare_ivar x1 x2 = 0) v1 v2 && Int63.(o1 = o2)
+         | W_Real (v1,o1), W_Real (v2,o2) -> 
+	   Option.equal (fun x1 x2 -> Imt.compare_rvar x1 x2 = 0) v1 v2 && Float.(o1 = o2)
+	 | _, _ -> false)
+     in
+     Array.equal ~equal
+   and s = s || equal_mixed_row r r' witness_row row in
+   a, Zom.update z row ~equal, s
 
 
     let approx_mixed_candidates
@@ -1283,9 +1336,9 @@ let index_of_db_dimension l i =
 	(r': S.ctx) 
 	((row : mixed_row), (m1, m2, l), i, _) =     
       let fmap v = (match v with
-	| W_Int _, _  -> 
+	| W_Int (_, _)  -> 
 	  (W_Int (Some (Int63.max_value)) , W_Int (Some (Int63.min_value))) 
-	| W_Real _, _ -> 
+	| W_Real (_, _) -> 
 	  (W_Real (Some (Float.max_value)), W_Real (Some (Float.min_value)))) in
       let init_array = Array.map fmap row in
       let init = init_array, Zom.Z0, false
@@ -1295,55 +1348,57 @@ let index_of_db_dimension l i =
       fold_mixed_candidates_list r r' row l i ~init ~f
 
     let fix_mixed_variable r v x = 
-      let r1, r2 =  match v with 
-	| W_Int v  -> 
+      let r1, r2 =  match v, x with 
+	| W_Int v, W_Int x  -> 
 	  S.set_lb_local r v x, S.set_ub_local r v x
-	| W_Real v -> 
-	  S.set_real_lb_local r v (Int63.to_float x), S.set_real_ub_local r v (Int63.to_float x) in
+	| W_Real v, W_Real x -> 
+	  S.set_real_lb_local r v x, S.set_real_ub_local r v x 
+	| _, _ -> raise (Unreachable.Exn _here_) in
       response_of_attempts r1 r2
 
-    let assert_mixed_ovar_equal {r_mdiff_h} r' (v1, o1) (v2, o2) =
+    let assert_mixed_ovar_equal {r_mdiff_h} r' v1 v2 =
       let fb b = if b then N_Ok else N_Unsat
-      and f v1 v2 x =
-	match v1, v2 with
-	  | W_Int v1, W_Int v2 -> 
+      and f v1 v2 (x : (Int63.t, Float.t) ireither) =
+	match v1, v2, x with
+	  | W_Int v1, W_Int v2, W_Int x -> 
             assert (Imt.compare_ivar v1 v2 < 0);
             let v = Hashtbl.find r_mdiff_h (W_Int v1, W_Int v2) in
             let v = Option.value_exn v ~here:_here_ in
-            fix_mixed_variable r' v x
-	  | W_Real v1, W_Real v2 ->
+            fix_mixed_variable r' v (W_Int x)
+	  | W_Real v1, W_Real v2, W_Real x ->
 	    assert (Imt.compare_rvar v1 v2 < 0);
 	    let v = Hashtbl.find r_mdiff_h (W_Real v1, W_Real v2) in
 	    let v = Option.value_exn v ~here:_here_ in
-	    fix_mixed_variable r' v x     
-	  | _ , _ -> raise (Failure "Undefined case for assert_mixed_ovar_equal")
-      and d = Int63.(o2 - o1) in
+	    fix_mixed_variable r' v (W_Real x)     
+	  | _ , _, _ -> raise (Failure "Undefined case for assert_mixed_ovar_equal")
+      in
       match v1, v2 with
-      | W_Int (Some v1), W_Int (Some v2) ->
+      | W_Int (Some v1, o1), W_Int (Some v2, o2) ->
         if Imt.compare_ivar v1 v2 = 0 then
           fb (Int63.equal o1 o2)
         else if Imt.compare_ivar v1 v2 > 0 then
-          f (W_Int v2) (W_Int v1) (Int63.neg d)
+          f (W_Int v2) (W_Int v1) (W_Int (Int63.(o1 - o2)))
         else
-          f (W_Int v1) (W_Int v2) d
-      | W_Real (Some v1), W_Real (Some v2) ->
+          f (W_Int v1) (W_Int v2) (W_Int (Int63.(o2 - o1)))
+      | W_Real (Some v1, o1), W_Real (Some v2, o2) ->
 	if Imt.compare_rvar v1 v2 = 0 then
-	  fb (Int63.equal o1 o2)
+	  fb (Float.equal o1 o2)
 	else if Imt.compare_rvar v1 v2 > 0 then 
-	  f (W_Real v2) (W_Real v1) (Int63.neg d)
+	  f (W_Real v2) (W_Real v1) (W_Real (Float.(o1 - o2)))
 	else 
-	  f (W_Real v1) (W_Real v2) d
-      | W_Int (Some v1), W_Int None ->
-        fix_mixed_variable r' (W_Int v1) d
-      | W_Int None, W_Int (Some v2) ->
-        fix_mixed_variable r' (W_Int v2) Int63.(neg d)
-      | W_Int None, W_Int None 
-      | W_Real None, W_Real None ->
+	  f (W_Real v1) (W_Real v2) (W_Real (Float.(o1 - o2)))
+      | W_Int (Some v1, o1), W_Int (None, o2) ->
+        fix_mixed_variable r' (W_Int v1) (W_Int (Int63.(o2 - o1)))
+      | W_Int (None,o1), W_Int (Some v2,o2) ->
+        fix_mixed_variable r' (W_Int v2) (W_Int (Int63.(o1 - o2)))
+      | W_Int (None, o1), W_Int (None, o2) -> 
         fb (Int63.equal o1 o2)
-      | W_Real (Some v1), W_Real None ->
-	fix_mixed_variable r' (W_Real v1) d
-      | W_Real None, W_Real (Some v2) -> 
-	fix_mixed_variable r' (W_Real v2) Int63.(neg d)
+      | W_Real (None,o1), W_Real (None,o2) ->
+        fb (Float.equal o1 o2)
+      | W_Real (Some v1, o1), W_Real (None, o2) ->
+	fix_mixed_variable r' (W_Real v1) (W_Real Float.(o2 - o1))
+      | W_Real (None, o1), W_Real (Some v2, o2) -> 
+	fix_mixed_variable r' (W_Real v2) (W_Real Float.(o1 - o2))
       | _, _ -> raise (Failure "Undefined case (2) for assert_mixed_ovar_equal")
 
 
@@ -1454,25 +1509,32 @@ let index_of_db_dimension l i =
 (**   Mixed Int/Real   *)
 
     let deref_mvar_sol r' sol = function
-      | W_Int (Some v), o ->
+      | W_Int (Some v, o) ->
         Int63.(to_float(S.ideref_sol r' sol v + o))
-      | W_Real (Some v), o ->
-	Float.(S.rderef_sol r' sol v + (Int63.to_float o))
-      | W_Int None, o ->
+      | W_Real (Some v, o) ->
+	Float.(S.rderef_sol r' sol v + o)
+      | W_Int (None, o) ->
         Int63.to_float o
-      | W_Real None, o -> 
-	Int63.to_float o
+      | W_Real (None, o) -> 
+	o
 
     let matches_mixed_row r' sol row_concrete row =
       Array.for_all2_exn row row_concrete
         ~f:(fun ov c -> Float.equal (deref_mvar_sol r' sol ov) c)
 
+    let exists_mixed_index (m1, m2, l) ~f ~(min:Float.t) ~(max:Float.t) =
+      List.exists l ~f ||
+        let f ~key ~data acc = acc || List.exists data ~f in
+        Map.fold_range_inclusive m1 ~min ~max ~init:false ~f ||
+          Map.fold_range_inclusive m2 ~min ~max ~init:false ~f
+
+
     let check_for_mocc r r' sol ((row, index, i, _) : mixed_occ) =
       let row = Array.map row ~f:(deref_mvar_sol r' sol) in
       let f = matches_mixed_row r' sol row 
-      and min = Int63.of_int(Float.iround_down_exn (row.(i))) 
-      and max = Int63.of_int(Float.iround_down_exn (row.(i))) in
-      exists_index index ~min ~max ~f
+      and min = row.(i) 
+      and max = row.(i) in
+      exists_mixed_index index ~min ~max ~f
 
     let check_for_bvar_mixed ({r_mocc_h} as r) r' sol v =
       not (S.bderef_sol r' sol v) ||
@@ -1640,7 +1702,7 @@ let index_of_db_dimension l i =
             not (Int63.(equal ub min_value)) &&
             not (Int63.equal lb ub) &&
             (match ov with
-              | W_Int (Some v), o ->
+              | W_Int (Some v, o) ->
 		let middle = Int63.((lb + ub) / (one + one) - o) in
 		let middle = Int63.to_float middle
 		and range = Int63.to_float ub -. Int63.to_float lb in
@@ -1651,16 +1713,16 @@ let index_of_db_dimension l i =
 			  middle +. 0.5)
                       else
 			 middle))
-              | W_Int None, _ ->
+              | W_Int (None, _) ->
 		false
-	      | _, _ -> raise (Failure "Unexpected int value branch_on_mixed_column"))
+	      | _  -> raise (Failure "Unexpected int value branch_on_mixed_column"))
 	| W_Real (Some lb), W_Real (Some ub) ->
 	    not (Float.(equal lb max_value)) &&
             not (Float.(equal ub min_value)) &&
             not (Float.equal lb ub) &&
 	      (match ov with
-		| W_Real (Some v), o ->
-		  let middle = Float.((lb + ub) / (2.0) - (Int63.to_float o))
+		| W_Real (Some v, o) ->
+		  let middle = Float.((lb + ub) / (2.0) - o)
 		  and range = Float.(ub - lb) in
 		  bool_of_ok_or_fail
 		    (S.rbranch r' v
@@ -1669,9 +1731,9 @@ let index_of_db_dimension l i =
 			    Float.(middle + 0.5))
 			else
 			   middle))
-		| W_Real None, _ ->
+		| W_Real (None, _) ->
 		  false
-		| _, _ -> raise (Failure "Unexpected real value branch_on_mixed_column"))
+		| _ -> raise (Failure "Unexpected real value branch_on_mixed_column"))
 	| _, _  -> raise (Failure "Unexpected case branch_on_mixed_column")
 	     
 
@@ -1708,30 +1770,29 @@ let index_of_db_dimension l i =
       branch_mixed r ~f
 
 
-    let branch_on_mixed_diff {r_mdiff_h} r' (v1, o1) (v2, o2) =
+    let branch_on_mixed_diff {r_mdiff_h} r' var1 var2 =
       let doit v1 v2 x =
 	let v = Hashtbl.find r_mdiff_h (v1, v2) in
         let v = Option.value_exn v ~here:_here_ in
-        let x = Int63.to_float x in
         (match v with 
 	  | W_Int v -> bool_of_ok_or_fail (S.ibranch r' v x)
-	  | W_Real v -> bool_of_ok_or_fail (S.rbranch r' v x)) 
-      and d = Int63.(o2 - o1) in
-      match v1, v2 with
-      | W_Int (Some v1), W_Int (Some v2) ->
+	  | W_Real v -> bool_of_ok_or_fail (S.rbranch r' v x))
+      in      
+      match var1, var2 with
+      | W_Int (Some v1, o1), W_Int (Some v2, o2) ->
         if Imt.compare_ivar v1 v2 = 0 then
           false
         else if Imt.compare_ivar v1 v2 > 0 then
-          doit (W_Int v2) (W_Int v1) (Int63.neg d)
+          doit (W_Int v2) (W_Int v1) (Int63.(to_float( neg (o2 - o1))))
         else
-          doit (W_Int v1) (W_Int v2) d
-      | W_Real (Some v1), W_Real (Some v2) ->
+          doit (W_Int v1) (W_Int v2) (Int63.(to_float(o2 - o1)))
+      | W_Real (Some v1, o1), W_Real (Some v2, o2) ->
 	if Imt.compare_rvar v1 v2 = 0 then
 	  false
 	else if Imt.compare_rvar v1 v2 > 0 then 
-	  doit (W_Real v2) (W_Real v1) (Int63.neg d)
+	  doit (W_Real v2) (W_Real v1) (Float.(neg (o2 - o1)))
 	else 
-	  doit (W_Real v1) (W_Real v2) d
+	  doit (W_Real v1) (W_Real v2) (Float.(o2 - o1))
       | _, _ ->
         false
 

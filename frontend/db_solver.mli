@@ -18,7 +18,7 @@ sig
     I.c Db_logic.A.t Formula.t ->
     bool
     
-  val assert_formula :
+   val assert_formula :
     ctx -> I.c Db_logic.A.t Formula.t -> [> `Ok | `Out_of_fragment ]
 
   val solve :
