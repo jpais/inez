@@ -270,6 +270,89 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     | Formula.F_Atom (A.A_LeR m | A.A_EqR m) ->
       in_fragment_term ~under_forall m
 
+(**** Check if it is mixed or pure integer formula*)
+
+  let rec is_mixed =
+    function 
+      | Formula.F_True ->
+	false
+      | Formula.F_Not g ->
+	is_mixed g
+      | Formula.F_And (g, h) ->
+	is_mixed g || is_mixed h
+      | Formula.F_Ite (q, g, h) ->
+	is_mixed q ||
+        is_mixed g ||
+        is_mixed h
+      | Formula.F_Atom (A.A_Exists d) ->
+	is_mixed_db d
+      | Formula.F_Atom (A.A_Bool (M.M_Bool g)) ->
+	is_mixed g
+      | Formula.F_Atom (A.A_Bool b) ->
+	is_mixed_term b
+      | Formula.F_Atom (A.A_Le m | A.A_Eq m) ->
+	is_mixed_term m
+      | Formula.F_Atom (A.A_LeR m | A.A_EqR m) ->
+	is_mixed_term m
+
+  and is_mixed_term : 
+type s . (I.c, s) M.t -> bool =
+    function 
+      | M.M_Int _ ->
+	false
+      | M.M_Real _ -> 
+	true
+      | M.M_Var _ ->
+	false
+      | M.M_Bool g ->
+	is_mixed g
+      | M.M_ROI i -> 
+	true
+      | M.M_Sum (a, b) ->
+	is_mixed_term a || is_mixed_term b
+      | M.M_RSum (a, b) ->
+	true
+      | M.M_Prod (_, a) ->
+	is_mixed_term a
+      | M.M_RProd (_, a) ->
+	true
+      | M.M_Ite (q, a, b) ->
+	is_mixed q ||
+          is_mixed_term a ||
+          is_mixed_term b
+      | M.M_RIte (q, a, b) ->
+	true
+      | M.M_App (a, b) ->
+	is_mixed_term a || is_mixed_term b
+
+  and is_mixed_db :
+  type s . (I.c, s) D.t -> bool
+      = function 
+      | D.D_Rel (_, f) ->
+        false
+      | D.D_Input (_, l) ->
+	List.for_all l ~f:is_mixed_row
+      | D.D_Cross (a, b) ->
+	is_mixed_db a || is_mixed_db b
+      | D.D_Sel (a, f) ->
+	is_mixed_db a ||
+          let g = f (get_dummy_row_db a) in
+          is_mixed g
+
+and is_mixed_row : 
+  type s . (I.c, s) R.t -> bool =
+    function
+    | R.R_Int m ->
+      is_mixed_term  m
+    | R.R_Real m ->
+      true
+    | R.R_Bool b ->
+      is_mixed_term b
+    | R.R_Pair (a, b) ->
+      is_mixed_row a || is_mixed_row b 
+
+(*****************************************************************)
+
   let register_membership_bulk   {r_in_m} b l =
     Hashtbl.change r_in_m b
       (function
@@ -472,15 +555,15 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     else
       None
 
-  let assert_formula {r_mode; r_ctx; r_smtlib_ctx} g =
+  let assert_formula {r_mode; r_ctx; r_ismixed; r_smtlib_ctx} g =
     match r_mode with
     | `Smt_out ->
       let r_smtlib_ctx = Option.value_exn ~here:_here_ r_smtlib_ctx in
       Smt.assert_formula r_smtlib_ctx g
-    | _ ->
-      S'.assert_formula r_ctx g
+    | _ -> S'.assert_formula r_ctx g
 
   let assert_formula (({r_ctx; r_mode} as x) : ctx) (g: S'.c Db_logic.M.atom Formula.t) =
+    x.r_ismixed <- x.r_ismixed || (is_mixed g);
     match purify_formula_top x g with
     | Some g ->
       assert_formula x g; `Ok

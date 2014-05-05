@@ -21,20 +21,21 @@ type ii = (
 
 let db =
   let f i =
-    let j = if double then (2.0 *. to_float(i)) else (to_float(i) +. 1.0 in
-    make_row_ii (toi i, toi j) in
-  make_db_ii
-    (match List.init n ~f with
-    | _ :: d when double ->
-      d
-    | l ->
-      l) ;;
+    let j = if double 
+            then (2.0 *. Int.to_float(i)) 
+            else (1.0 +. Int.to_float(i)) in
+    make_row_ii (toi i, tor j) in
+  make_db_ii (match List.init n ~f with
+               | _ :: d when double ->
+                 d
+	       | l -> 
+		 l) ;;
 
 (* there exists an employee whose salary + bonus exceeds the limit *)
 
 constrain
   (let f (x, y : Row) =
-     ~logic (x = y) in
-   ~logic (exists (sel db f))) ;;
+     ~logicr (x = y) in
+   ~logicr (exists (sel db f))) ;;
 
 solve_print_result () ;;

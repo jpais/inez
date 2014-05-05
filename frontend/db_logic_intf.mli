@@ -41,12 +41,12 @@ module type Row_with_ops = sig
     ('i, 's) t ->
     (('i, int) m, 'i a Formula.t) Terminology.ibeither list
 
-  val of_list' :
+  val of_mixed_list :
     'u s ->
     (('i, int) m, ('i, float) m, 'i a Formula.t) Terminology.irbeither list ->
     ('i, 'u) t option
 
-  val to_list' :
+  val to_mixed_list :
     ('i, 's) t ->
     (('i, int) m, ('i, float) m, 'i a Formula.t) Terminology.irbeither list
 

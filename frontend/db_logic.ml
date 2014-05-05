@@ -61,7 +61,7 @@ struct
     of_list s l >>= function r, [] -> Some r | _ -> None
 
 
-  let rec of_list' :
+  let rec of_mixed_list :
   type s . s S.t ->
     (('i, int) M.t, ('i, float) M.t, 'i A.t Formula.t) irbeither list ->
     (('i, s) R.t *
@@ -78,15 +78,15 @@ struct
         Some (R_Bool (M.M_Bool x), d)
       | S.S_Pair (s1, s2), l ->
         let open Option in
-        of_list' s1 l >>= (fun (x, l) ->
-          of_list' s2 l >>| (fun (y, l) ->
+        of_mixed_list s1 l >>= (fun (x, l) ->
+          of_mixed_list s2 l >>| (fun (y, l) ->
             R_Pair (x, y), l))
       | _ ->
         None
 
-let of_list' s l =
+let of_mixed_list s l =
     let open Option in
-    of_list' s l >>= function r, [] -> Some r | _ -> None
+    of_mixed_list s l >>= function r, [] -> Some r | _ -> None
 
 
   (* TODO : tail recursive *)
@@ -102,7 +102,7 @@ let of_list' s l =
       List.append (to_list m1) (to_list m2)
     | R_Real _ -> raise (Failure "Case not considered in ibeither. This function will be replaced by to_list'")
 
-  let rec to_list' :
+  let rec to_mixed_list :
   type s . ('i, s) t ->
     (('i, int) M.t, ('i, float) M.t, 'i A.t Formula.t) irbeither list =
     function
@@ -113,9 +113,7 @@ let of_list' s l =
     | R_Bool m ->
       [D_Bool (Formula.F_Atom (A.A_Bool m))]
     | R_Pair (m1, m2) ->
-      List.append (to_list' m1) (to_list' m2)
-
-
+      List.append (to_mixed_list m1) (to_mixed_list m2)
 
 end
 
