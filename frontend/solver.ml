@@ -550,7 +550,8 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
             v in
           Hashtbl.find_or_add r_rvar_of_rsum_m l ~default in
         (mvar_to_movar  v (W_Real o)))
-    | P.G_Sum s -> raise (Failure "Invalid case for MILP")     
+    | P.G_Sum s -> 
+      raise (Failure "ovar_of_term_mixed: Invalid case for MILP")     
 
   and ovar_of_formula ({r_ctx} as r) g =
     match xvar_of_formula_doit r g with

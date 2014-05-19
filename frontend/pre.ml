@@ -721,7 +721,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
   and flatten_mixed_term_aux ({r_sharing={s_mixed_sum_h}} as r) = function
     | M.M_Var v ->
       G_Base (B_RVar v)
-    | M.M_ROI x -> flatten_int_term r x 
+    | M.M_ROI x -> G_SumM (sum_of_mixed_term (flatten_int_term r x)) 
     | M.M_RIte (c, s, t) -> 
       let c = flatten_formula r c
       and s = flatten_mixed_term r s

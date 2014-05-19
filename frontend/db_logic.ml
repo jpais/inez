@@ -173,12 +173,18 @@ module Ops = struct
            with type ('i, 'q) t := ('i, 'q) M.t
            and type int_plug := Int63.t)
 
+  include (M : Ops_intf.Real
+	   with type ('i, 'q) t := ('i, 'q) M.t
+	   and type real_plug := Float.t)
+
   include A
 
   include (Formula : Ops_intf.Prop
            with type 'a t := 'a formula)
 
   let iite c a b = M.M_Ite (c, a, b)
+
+  let rite c a b = M.M_RIte (c, a, b)
 
   let (<) a b =
     Formula.F_Atom (A_Le (M.(a + M_Int Int63.one - b)))
@@ -192,6 +198,20 @@ module Ops = struct
   let (>=) a b = b <= a
 
   let (>) a b = b < a
+
+  let (<.) a b =
+    Formula.F_Atom (A_LeR (M.(a +. M_Real (Float.(1.0)) -. b)))
+
+  let (<=.) a b =
+    Formula.F_Atom (A_LeR M.(a -. b))
+
+  let (=.) a b =
+    Formula.F_Atom (A_EqR M.(a -. b))
+
+  let (>=.) a b = b <=. a
+
+  let (>.) a b = b <. a
+
 
   let sel = D.sel
 

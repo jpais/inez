@@ -52,8 +52,9 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
     r_theory_ctx    :  Dp.ctx;
     r_mode          :  mode;
     r_table_lazy_h  :  (d_boxed, table_lazy) Hashtbl.t;
+    r_mixed_table_lazy_h : (d_boxed, mixed_table_lazy) Hashtbl.t;
     r_in_m          :  (bool_id, in_constraint_lazy list) Hashtbl.t;
-    r_in_m_irb      :  (bool_id, irb_constraint_lazy list) Hashtbl.t;  (* Added *)
+    r_in_m_mixed      :  (bool_id, irb_constraint_lazy list) Hashtbl.t;  (* Added *)
     r_smtlib_ctx    :  Smt.ctx option;
     mutable r_ismixed       :  bool
   }
@@ -69,9 +70,11 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
       (* TODO : monomorphic hashtable *)
       r_table_lazy_h =
         Hashtbl.Poly.create () ~size:32;
+      r_mixed_table_lazy_h =
+	Hashtbl.Poly.create () ~size:32;
       r_in_m = 
         Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
-      r_in_m_irb =
+      r_in_m_mixed =
 	Hashtbl.create () ~size:10240 ~hashable:hashable_bool_id;
       r_ismixed = false;
       r_smtlib_ctx =
@@ -147,7 +150,7 @@ module Make (Imt : Imt_intf.S_with_dp) (I : Id.S) = struct
         | S_Neg None ->
           None, Int63.zero))
 
-  let force_row_irb {r_ctx} = (* TODO: Check if it's ok to return float *)
+  let force_mixed_row {r_ctx} = (* TODO: Check if it's ok to return float *)
     List.map
       ~f:(function
 	| H_Int i -> 
@@ -359,6 +362,13 @@ and is_mixed_row :
       | Some l1 -> Some (List.append l l1)
       | None -> Some l)
 
+  let register_mixed_membership_bulk {r_in_m_mixed} b l =
+    Hashtbl.change r_in_m_mixed b
+      (function 
+	| Some l1 -> Some (List.append l l1)
+	| None -> Some l)
+
+
   let fv = {Id.f_id = Fn.id}
 
   let rec path_and_data_of_db :
@@ -401,7 +411,7 @@ and is_mixed_row :
   type s. ctx -> (I.c, s) R.t -> ibentry list =
     fun x r -> List.rev (list_of_row_aux [] x r)
 
-  and list_of_irb_row_aux :
+  and mixed_list_of_row_aux :
   type s. irbentry list -> ctx -> (I.c, s) R.t ->
       irbentry list =
       fun acc ({r_ctx} as x) r ->
@@ -421,12 +431,12 @@ and is_mixed_row :
             let m = S'.xvar_of_term r_ctx m in
             H_Bool m :: acc
 	  | R.R_Pair (r1, r2) ->
-            let acc = list_of_irb_row_aux acc x r1 in
-            list_of_irb_row_aux acc x r2
+            let acc = mixed_list_of_row_aux acc x r1 in
+            mixed_list_of_row_aux acc x r2
 
-  and list_of_irb_row :
+  and mixed_list_of_row :
   type s. ctx -> (I.c, s) R.t -> irbentry list =
-      fun x r -> List.rev (list_of_irb_row_aux [] x r)
+      fun x r -> List.rev (mixed_list_of_row_aux [] x r)
 
 
   and table_lazy_of_db :
@@ -436,6 +446,15 @@ and is_mixed_row :
         let ll = List.map l ~f:(list_of_row x) in
         lazy (List.map ll ~f:(force_row x)) in
       Hashtbl.find_or_add r_table_lazy_h (DBox l) ~default
+
+  and mixed_table_lazy_of_db :
+  type s . ctx -> (I.c, s) R.t list -> mixed_table_lazy =
+    fun ({r_mixed_table_lazy_h} as x) l ->
+      let default () =
+        let ll = List.map l ~f:(mixed_list_of_row x) in
+        lazy (List.map ll ~f:(force_mixed_row x)) in
+      Hashtbl.find_or_add r_mixed_table_lazy_h (DBox l) ~default
+
 
   and purify_membership :
   type s . ?acc:(in_constraint_lazy list) -> ctx ->
@@ -457,6 +476,28 @@ and is_mixed_row :
         let g1 = purify_formula x (f r) ~polarity:`Positive in
         let acc, g2 = purify_membership ~acc x d r in
         acc, Formula.(g1 && g2)
+
+and purify_mixed_membership :
+  type s . ?acc:(irb_constraint_lazy list) -> ctx ->
+    (I.c, s) D.t -> (I.c, s) R.t ->
+    irb_constraint_lazy list * I.c Logic.A.t Formula.t =
+    fun ?acc:(acc = []) x d r ->
+      match d, r with
+      | D.D_Rel (_, f), r ->
+        acc, purify_formula x (f r) ~polarity:`Positive
+      | D.D_Input (_, l), _ ->
+        let ll = mixed_table_lazy_of_db x l
+        and rl = mixed_list_of_row x r in
+        (rl, ll) :: acc, Formula.true'
+      | D.D_Cross (d1, d2), R.R_Pair (r1, r2) ->
+        let acc, g1 = purify_mixed_membership ~acc x d1 r1 in
+        let acc, g2 = purify_mixed_membership ~acc x d2 r2 in
+        acc, Formula.(g1 && g2)
+      | D.D_Sel (d, f), _ ->
+        let g1 = purify_formula x (f r) ~polarity:`Positive in
+        let acc, g2 = purify_mixed_membership ~acc x d r in
+        acc, Formula.(g1 && g2)
+
 
   and columnwise_equal :
   type s. ctx -> (I.c, s) R.t -> (I.c, s) R.t ->
@@ -503,12 +544,22 @@ and is_mixed_row :
 
   and purify_atom :
   ctx -> I.c A.t -> polarity:polarity -> I.c Logic.A.t Formula.t = 
-    fun ({r_ctx; r_mode} as x) a ~polarity ->
-      match a, polarity, r_mode with
-      | A.A_Exists d, `Positive, (`Smt_out | `Eager) ->
+    fun ({r_ctx; r_mode; r_ismixed} as x) a ~polarity ->
+      match a, polarity, r_mode, r_ismixed with
+      | A.A_Exists d, `Positive, (`Smt_out | `Eager), _ ->
         let r = get_symbolic_row_db d in
         purify_membership_eager x d r
-      | A.A_Exists d, `Positive, _ ->
+      | A.A_Exists d, `Positive, _, true ->
+        let l, g =
+          let r = get_symbolic_row_db d in
+          purify_mixed_membership x d r
+        and b = I.gen_id Type.Y_Bool in
+        register_mixed_membership_bulk x b l;
+        Formula.(&&) g
+          (Formula.F_Atom
+             (Logic.A.A_Bool
+                (Logic.M.M_Var b)))
+      | A.A_Exists d, `Positive, _, _ ->
         let l, g =
           let r = get_symbolic_row_db d in
           purify_membership x d r
@@ -518,30 +569,30 @@ and is_mixed_row :
           (Formula.F_Atom
              (Logic.A.A_Bool
                 (Logic.M.M_Var b)))
-      | A.A_Exists d, _, _ ->
+      | A.A_Exists d, _, _, _ ->
         let l, d = path_and_data_of_db d in
         let f r =
           let f g = purify_formula x (g r) ~polarity in 
           Formula.forall l ~f
         and d = Option.value_exn ~here:_here_ d in
         Formula.exists d ~f
-      | A.A_Bool b, _, _ ->
+      | A.A_Bool b, _, _, _ ->
         Formula.F_Atom
           (Logic.A.A_Bool
              (C.map_non_atomic b ~f:(purify_atom x) ~fv))
-      | A.A_Le s, _, _ ->
+      | A.A_Le s, _, _, _ ->
         Formula.F_Atom
           (Logic.A.A_Le
              (C.map_non_atomic s ~f:(purify_atom x) ~fv))
-      | A.A_Eq s, _, _ ->
+      | A.A_Eq s, _, _, _ ->
         Formula.F_Atom
           (Logic.A.A_Eq
              (C.map_non_atomic s ~f:(purify_atom x) ~fv))
-      | A.A_EqR s, _, _ ->
+      | A.A_EqR s, _, _, _ ->
 	Formula.F_Atom
           (Logic.A.A_EqR
              (C.map_non_atomic s ~f:(purify_atom x) ~fv))
-      | A.A_LeR s, _, _ ->
+      | A.A_LeR s, _, _, _ ->
         Formula.F_Atom
           (Logic.A.A_LeR
              (C.map_non_atomic s ~f:(purify_atom x) ~fv))
@@ -600,16 +651,16 @@ and is_mixed_row :
       | W_Real v1 -> Imt'.register_rvar r v1 
 
 
-  let solve ({r_ctx; r_bg_ctx; r_theory_ctx; r_in_m;r_in_m_irb; r_mode;
+  let solve ({r_ctx; r_bg_ctx; r_theory_ctx; r_in_m;r_in_m_mixed; r_mode;
               r_smtlib_ctx; r_ismixed} as x) =
     match r_mode with
-    | `Lazy ->
-      if r_ismixed then
+    | `Lazy ->      
+      if not (r_ismixed) then
 	let f ~key ~data =
           let v = S'.bvar_of_id r_ctx key
           and fd = name_diff r_bg_ctx
           and frv = Imt'.register_ivar r_bg_ctx in
-          Imt'.register_bvar r_bg_ctx v;
+          Imt'.register_bvar r_bg_ctx v;	 
           let f (e, l) =
             Dp.assert_membership
               r_theory_ctx
@@ -619,18 +670,18 @@ and is_mixed_row :
 	let r = S'.solve r_ctx in
 	if !Sys.interactive then Dp.print_stats r_theory_ctx;
 	r
-      else
+      else 
 	let f ~key ~data = 
 	  let v = S'.bvar_of_id r_ctx key
 	  and fd = mixed_name_diff r_bg_ctx
 	  and frv = mixed_register_var r_bg_ctx in
-	  Imt'.register_bvar r_bg_ctx v;
+	  Imt'.register_bvar r_bg_ctx v;	
 	  let f (e, l) =
 	    Dp.assert_mixed_membership
 	      r_theory_ctx
-	      v (force_row_irb x e) (Lazy.force l) ~fd ~frv in
+	      v (force_mixed_row x e) (Lazy.force l) ~fd ~frv in
 	  List.iter data ~f in
-	Hashtbl.iter r_in_m_irb ~f;
+	Hashtbl.iter r_in_m_mixed ~f;
 	let r = S'.solve r_ctx in
 	if !Sys.interactive then Dp.print_stats r_theory_ctx;
 	r

@@ -29,6 +29,8 @@ module type S = sig
 
   val toi : int -> (c, int) term_plug
 
+  val tor : float -> (c, float) term_plug
+
   val to_real :  (c, int) term_plug ->  (c, float) term_plug
 
   val gen_id : 's Type.t -> (c, 's) Id.t

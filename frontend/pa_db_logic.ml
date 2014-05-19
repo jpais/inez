@@ -32,6 +32,22 @@ let cast_pattern = function
     None
 ;;
 
+let cast_mixed_pattern = function 
+  | <:patt@loc< ($p$ : Int) >> when irrefutable p ->
+    Some <:patt@loc< Terminology.D_Int $p$ >>
+  | <:patt@loc< ($p$ : Bool) >> when irrefutable p ->
+    Some <:patt@loc< Terminology.D_Bool $p$ >>
+  | <:patt@loc< ($p$ : Real) >> when irrefutable p ->
+    Some <:patt@loc< Terminology.D_Real $p$ >>
+  | <:patt@loc< $lid:_$ >> as p ->
+    Some <:patt@loc< Terminology.D_Int $p$ >>
+  | <:patt< _ >> as p ->
+    Some p
+  | _ ->
+    None
+;;
+
+
 let rec list_of_pattern = function
   | Ast.PaCom (_, p1, p2) ->
     (match list_of_pattern p1 with
@@ -44,7 +60,7 @@ let rec list_of_pattern = function
     | None ->
       None)
   | p ->
-    match cast_pattern p with
+    match cast_mixed_pattern p with
     | Some p ->
       Some [p]
     | None ->
@@ -73,7 +89,7 @@ let transform_select = function
       and id = Camlp4_maps.gensym () in
        <:expr@loc<
          fun $lid:id$ ->
-           match Db_logic.R.to_list $lid:id$ with
+           match Db_logic.R.to_mixed_list $lid:id$ with
            | $p$ -> $e'$
            | _ ->
              Formula.(F_Not F_True) >>)

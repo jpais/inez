@@ -60,6 +60,9 @@ let rderef = function
 let toi x =
   Db_logic.M.M_Int (Core.Std.Int63.of_int x)
 
+let tor x =
+  Db_logic.M.M_Real x
+
 let to_real x = 
   raise (Failure "TODO: Real numbers not supported yet.")
 

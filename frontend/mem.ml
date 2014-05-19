@@ -2,7 +2,7 @@ open Core.Std
 open Terminology
 open Bounds
 
-let dbg = false
+let dbg = true
 
 module Zom = struct
 
@@ -258,6 +258,7 @@ type mixed_row = (Imt.ivar option offset, Imt.rvar option roffset) ireither arra
     r_mixbounds_h    :  (mixed_bounds_key, mixed_bounds_value) Hashtbl.t;
     r_stats          :  stats;
     mutable r_level  :  int;
+    mutable r_ismixed:  bool;
   }
 
   let make_ctx () = {
@@ -290,6 +291,7 @@ type mixed_row = (Imt.ivar option offset, Imt.rvar option roffset) ireither arra
       s_maxdepth = 0;
     };
     r_level = 0;
+    r_ismixed = false;
   }
 
   let print_stats {r_stats} =
@@ -452,6 +454,8 @@ let index_of_db_dimension l i =
     let e = Array.of_list e
     and l = List.map l ~f:Array.of_list in
     List.iter l ~f:(register_mdiffs r e ~fd ~frv);
+    Printf.printf "%s" "assert_mixed_membership: setea r_ismixed en true";
+    r.r_ismixed <- true;
     let index = index_of_mdb r l 0 in
     if not (bvar_in_dequeue r_bvar_d b) then
       Dequeue.enqueue_front r_bvar_d b;
@@ -1459,11 +1463,17 @@ let lb_of_movar r' = function
            ~default:N_Ok)
 
 
-    let propagate ({r_stats; r_bvar_d} as r) r' =
+    let propagate ({r_stats; r_bvar_d; r_ismixed} as r) r' =
       r_stats.s_propagate <- r_stats.s_propagate + 1;
-      let f = propagate_for_bvar r r' in
-      intercept_response "propagate"
-        (dequeue_fold_responses r_bvar_d ~f)
+      if r_ismixed then
+	let f = propagate_for_mixed_bvar r r' in
+	intercept_response "propagate_mixed"
+	  (dequeue_fold_responses r_bvar_d ~f)
+      else 
+	let f = propagate_for_bvar r r' in
+	intercept_response "propagate"
+	  (dequeue_fold_responses r_bvar_d ~f)
+
 
     let propagate_mixed ({r_stats; r_bvar_d} as r) r' =
       r_stats.s_propagate <- r_stats.s_propagate + 1;
@@ -1499,13 +1509,8 @@ let lb_of_movar r' = function
     let check_for_bvar ({r_occ_h} as r) r' sol v =
       not (S.bderef_sol r' sol v) ||
         for_all_occs r v ~f:(check_for_occ r r' sol)
-	
-    let check ({r_stats; r_bvar_d} as r) r' sol =
-      r_stats.s_check <- r_stats.s_check + 1;
-      let f = check_for_bvar r r' sol in
-      intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
-
-
+           
+      
 (**   Mixed Int/Real   *)
 
     let deref_mvar_sol r' sol = function
@@ -1544,6 +1549,16 @@ let lb_of_movar r' = function
       r_stats.s_check <- r_stats.s_check + 1;
       let f = check_for_bvar_mixed r r' sol in
       intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
+
+
+
+let check ({r_stats; r_bvar_d} as r) r' sol =
+      r_stats.s_check <- r_stats.s_check + 1;
+      if r.r_ismixed 
+      then let f = check_for_bvar_mixed r r' sol in
+	   intercept_bool "check_mixed" (Dequeue.for_all r_bvar_d ~f)
+      else let f = check_for_bvar r r' sol in
+	   intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
 
 
 (********************************************************* branching **********************************************************************)
@@ -1662,21 +1677,7 @@ let lb_of_movar r' = function
     let branch2 r r' =
       branch r ~f:(branch2_for_bvar r r')
 
-    let branch ({r_stats} as r) r' =
-      try
-        r_stats.s_branch <- r_stats.s_branch + 1;
-        ok_for_true
-          (branch0 r r' ||
-             branch0_5 r r' ||
-             branch1 r r' ||
-             branch2 r r')
-      with
-      | e ->
-        (Printf.printf "exception: %s\n%!p" (Exn.to_string e);
-         raise e)
-
-
-
+    
 (* Mixed Int / Real *)
 
     let branch_for_mixed_bvar r r' v ~f =
@@ -1830,6 +1831,28 @@ let lb_of_movar r' = function
       | e ->
         (Printf.printf "exception: %s\n%!p" (Exn.to_string e);
          raise e)
+
+
+let branch ({r_stats} as r) r' =
+      try
+        r_stats.s_branch <- r_stats.s_branch + 1;
+	if r.r_ismixed then
+	  ok_for_true
+            (branch0_mixed r r' ||
+               branch0_5_mixed r r' ||
+               branch1_mixed r r' ||
+               branch2_mixed r r')    
+	else  
+	  ok_for_true
+            (branch0 r r' ||
+               branch0_5 r r' ||
+               branch1 r r' ||
+               branch2 r r')
+      with
+      | e ->
+        (Printf.printf "exception: %s\n%!p" (Exn.to_string e);
+         raise e)
+
          
 (* stack management *)
 
@@ -1838,7 +1861,7 @@ let lb_of_movar r' = function
       r.r_stats.s_maxdepth <- max r.r_stats.s_maxdepth r.r_level;
       r.r_stats.s_push_level <- r.r_stats.s_push_level + 1
 
-    let backtrack ({r_occ_h; r_stats} as r) _ =
+    let backtrack ({r_occ_h; r_mocc_h; r_stats} as r) _ =
       assert (r.r_level >= 0);
       r.r_level <- r.r_level - 1;
       (let f ~key ~data =
@@ -1849,7 +1872,9 @@ let lb_of_movar r' = function
            | _ ->
              () in
          Dequeue.iter data ~f in
-       Hashtbl.iter r_occ_h ~f);
+       if r.r_ismixed 
+       then Hashtbl.iter r_mocc_h ~f
+       else Hashtbl.iter r_occ_h ~f);
       r_stats.s_backtrack <- r_stats.s_backtrack + 1
 
   end

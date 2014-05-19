@@ -720,7 +720,7 @@ module Scip_with_dp = struct
         r_sol;
         r_cuts_n
       } in
-      let o = Some (make_dp d rval) in 
+      let o = Some (make_dp d rval) in
       (*let o = None in *)
       let r_cch = Some (new_cc_handler r_ctx o None) in
       rval.r_cch <- r_cch;

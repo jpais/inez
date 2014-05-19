@@ -47,6 +47,9 @@ let rderef = function
 let toi x =
   Logic.M.M_Int (Core.Std.Int63.of_int x)
 
+let tor x =
+  Logic.M.M_Real x
+
 let gen_id = Id'.gen_id
 
 let string_of_result =
