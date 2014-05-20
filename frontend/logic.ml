@@ -46,36 +46,73 @@ struct
   let of_int63 x = M_Int x
 
   let rec type_of_t :
-  type s . ('i, s) t -> f:('i Id.t_arrow_type) ->
-    s Type.t =
-    fun x ~f:({Id.a_f} as f) ->
-      match x with
-      | M_Bool _ ->
-        Type.Y_Bool
-      | M_Int _ ->
-        Type.Y_Int
-      | M_Real  _ ->
-        Type.Y_Real
-      | M_ROI _ -> 
-	Type.Y_Real
-      | M_Sum (_, _) ->
-        Type.Y_Int
-      | M_RSum (_,_) ->
-        Type.Y_Real
-      | M_Prod (_, _) ->
-        Type.Y_Int
-      | M_RProd (_,_) ->
-	Type.Y_Real
-      | M_Ite (_, _, _) ->
-        Type.Y_Int
-      | M_RIte (_,_,_) ->
-	Type.Y_Real
-      | M_Var id ->
-        a_f id
-      | M_App (a, b) ->
-        let t_a = type_of_t a ~f
-        and t_b = type_of_t b ~f in
-        Type.t_of_app t_a t_b
+  type s . ('i, s) t -> s Type.t =
+    function
+    | M_Bool _ ->
+      Type.Y_Bool
+    | M_Int _ ->
+      Type.Y_Int
+   	| M_Real  _ ->
+      Type.Y_Real
+   	| M_ROI _ -> 
+      Type.Y_Real
+    | M_Sum (_, _) ->
+      Type.Y_Int
+    | M_RSum (_,_) ->
+      Type.Y_Real
+    | M_Prod (_, _) ->
+      Type.Y_Int
+    | M_RProd (_,_) ->
+	  Type.Y_Real
+    | M_Ite (_, _, _) ->
+      Type.Y_Int
+    | M_RIte (_,_,_) ->
+	  Type.Y_Real
+    | M_Var id ->
+      Id.type_of_t id
+    | M_App (a, b) ->
+      let t_a = type_of_t a
+      and t_b = type_of_t b in
+      Type.t_of_app t_a t_b
+
+  let is_int :
+  type s . ('i, s) t -> bool =
+    fun m ->
+      match type_of_t m with
+      | Type.Y_Int ->
+        true
+      | _ ->
+        false
+
+  let is_bool :
+  type s . ('i, s) t -> bool =
+    fun m ->
+      match type_of_t m with
+      | Type.Y_Bool ->
+        true
+      | _ ->
+        false
+
+  let is_real :
+  type s . ('i, s) t -> bool =
+    fun m ->
+      match type_of_t m with
+      | Type.Y_Real ->
+        true
+      | _ ->
+        false
+        
+
+  (* FIXME : definitely not the right place for this *)
+  let rec fun_id_of_app :
+  type r . ('i, r) t ->  'i Id.Box_arrow.t option =
+    function
+    | M_App (M_Var id, _) ->
+      Some (Id.Box_arrow.Box id)
+    | M_App (f, _) ->
+      fun_id_of_app f
+    | _ ->
+      None
 
   let ( + ) a b =
     match a, b with
@@ -152,16 +189,17 @@ struct
       | M_Int _ ->
         init
       | M_Real _ ->
-	init 
+	    init 
       | M_Var _ ->
         init
       | M_Bool b ->
         f init b
-      | M_ROI x -> fold x ~init ~f
+      | M_ROI x ->
+        fold x ~init ~f
       | M_Sum (a, b) ->
         fold b ~init:(fold a ~init ~f) ~f
       | M_RSum (a, b) ->
-	fold b ~init:(fold a ~init ~f) ~f
+	    fold b ~init:(fold a ~init ~f) ~f
       | M_Prod (_, a) ->
         fold a ~init ~f
       | M_RProd (_, a) ->
@@ -171,12 +209,42 @@ struct
         let init = fold a ~init ~f in
         fold b ~init ~f
       | M_RIte (q, a, b) ->
-	let init = f init q in
-	let init = fold a ~init ~f in
-	fold b ~init ~f
+	    let init = f init q in
+	    let init = fold a ~init ~f in
+	    fold b ~init ~f
       | M_App (a, b) ->
         let init = fold a ~init ~f in
         fold b ~init ~f
+
+  let rec fold_sum_terms_impl :
+  type s . ('i, int) t ->
+    factor   : Int63.t ->
+    init     : 'a ->
+    f        : ('a -> Int63.t -> ('i, int) t -> 'a) ->
+    'a =
+    fun m ~factor ~init ~f ->
+      match m with
+      | M_Sum (a, b) ->
+        let init = fold_sum_terms_impl a ~factor ~init ~f in
+        fold_sum_terms_impl b ~factor ~init ~f
+      | M_Prod (c, a) ->
+        if Int63.(c = zero) then
+          init
+        else
+          let factor = Int63.(c * factor) in
+          fold_sum_terms_impl a ~factor ~init ~f
+      | _ ->
+        f init factor m
+
+  let rec fold_sum_terms m ~factor ~init ~f ~f_offset =
+    (let f (acc, offset) c m =
+       match m with
+       | M_Int x ->
+         acc, Int63.(offset + c * x)
+       | _ ->
+         f acc c m, offset in
+     fold_sum_terms_impl m ~factor ~init:(init, Int63.zero) ~f) |>
+        Tuple.T2.uncurry f_offset 
 
 end
 
@@ -270,6 +338,44 @@ module Make_term_conv (M1 : Term) (M2 : Term_with_ops) = struct
 
 end
 
+module Make_term_iter (M : Term_with_ops) = struct
+
+  type ('i, 'a) t_arrow__ =
+    {a_f : 't . ('i, 't) M.t -> 'a}
+
+  type polarity = [`Positive | `Negative | `Both]
+
+  let rec iter :
+  type r s . ('c, r) M.t ->
+    f  : ('c , unit) t_arrow__ ->
+    fa : ('c M.atom -> polarity:polarity -> unit) ->
+    unit =
+    fun m ~f:({a_f} as f) ~fa ->
+      a_f m;
+      match m with
+      | M.M_Bool g ->
+        Formula.iter_atoms g ~f:fa ~polarity:`Both
+      | M.M_Int _ ->
+        ()
+      | M.M_Real _ ->
+      	()
+      | M.M_Sum (m1, m2) ->
+        iter m1 ~f ~fa;
+        iter m2 ~f ~fa
+      | M.M_Prod (_, m) ->
+        iter m ~f ~fa
+      | M.M_Ite (g, m1, m2) ->
+        Formula.iter_atoms g ~f:fa ~polarity:`Both;
+        iter m1 ~f ~fa;
+        iter m2 ~f ~fa
+      | M.M_Var _ ->
+        ()
+      | M.M_App (m1, m2) ->
+        iter m1 ~f ~fa;
+        iter m2 ~f ~fa
+
+end
+
 (* boxed terms *)
 
 module Box = struct
@@ -293,11 +399,11 @@ module Ops = struct
            with type ('i, 'q) t := ('i, 'q) M.t
            and type real_plug := Float.t)
 
-  include A 
+  include A
 
   (*Same as sentence above, only includes the definition of Prop operators from Formula *)
   include (Formula : Ops_intf.Prop
-           with type 'a t := 'a Formula.t)
+           with type 'a t := 'a formula)
 
   (* As we already included definitions for Prop operators (from Formula) and Int and Float operators
     (from M), we only have to give a definition for Mixed operators*)

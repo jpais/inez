@@ -319,19 +319,6 @@ let index_of_db_dimension l i =
           accm1, accm2, data :: accl)
 
 
-(*  let index_of_mixed_db_dimension l i =
-    List.fold_left l
-      ~init:(Int63.Map.empty, Int63.Map.empty, [])
-      ~f:(fun (accm1, accm2, accl) data ->
-        match Array.get data i with
-        | (W_Int None | W_Real None), key when all_concrete_mixed data ->
-          Map.add_multi accm1 ~key ~data, accm2, accl
-        | (W_Int None | W_Real None), key ->
-          accm1, Map.add_multi accm2 ~key ~data, accl
-        | _ ->
-          accm1, accm2, data :: accl)
-*)
-
   let index_of_mixed_db_dimension l i =
     List.fold_left l
       ~init:(Float.Map.empty, Float.Map.empty, [])
@@ -454,7 +441,6 @@ let index_of_db_dimension l i =
     let e = Array.of_list e
     and l = List.map l ~f:Array.of_list in
     List.iter l ~f:(register_mdiffs r e ~fd ~frv);
-    Printf.printf "%s" "assert_mixed_membership: setea r_ismixed en true";
     r.r_ismixed <- true;
     let index = index_of_mdb r l 0 in
     if not (bvar_in_dequeue r_bvar_d b) then
@@ -500,30 +486,6 @@ let index_of_db_dimension l i =
       | None, o ->
         Some o
 
-    (*let lb_of_movar r' = function
-      | (W_Real (Some v)), o -> 
-	(match (S.get_real_lb_local r' v) with
-          | Some x -> W_Real (Some (Float.(x + (Int63.to_float o))))
-          | _ -> W_Real None)
-      | (W_Int (Some v)), o -> 
-	(match (S.get_lb_local r' v) with
-	  | Some x -> W_Int (Some (Int63.(x + o)))
-	  | _ -> W_Int None)  
-      | (W_Int None), o -> (W_Int (Some o))
-      | (W_Real None), o -> (W_Real (Some (Int63.to_float o)))
-	
-    let ub_of_movar r' = function
-      | (W_Real (Some v)), o -> 
-	(match (S.get_real_ub_local r' v) with
-          | Some x -> W_Real (Some (Float.(x + (Int63.to_float o))))
-          | _ -> W_Real None)
-      | (W_Int (Some v)), o -> 
-	(match (S.get_ub_local r' v) with
-	  | Some x -> W_Int (Some (Int63.(x + o)))
-	  | _ -> W_Int None)  
-      | (W_Int None), o -> (W_Int (Some o))
-      | (W_Real None), o -> (W_Real (Some (Int63.to_float o)))
-    *)
 
 let lb_of_movar r' = function
       | W_Real (Some v, o) -> 
@@ -1070,8 +1032,6 @@ let lb_of_movar r' = function
                 g (i + 1) N_Tightened 
               | N_Ok ->
                 g (i + 1) acc)
-            (* | Some _ ->
-               g (i + 1) acc *)
             | None ->
               raise (Unreachable.Exn _here_)
           else
@@ -1183,8 +1143,8 @@ let lb_of_movar r' = function
     let approx_candidates
         ?cnst_only:(cnst_only = false)
         r r' (row, (m1, m2, l), i, _) =
-      let n = Array.length row in
-      let p = Some Int63.max_value, Some Int63.min_value in
+      let n = Array.length row
+      and p = Some Int63.max_value, Some Int63.min_value in
       let init = Array.init ~f:(fun _ -> p) n, Zom.Z0, false
       and f = approx_candidates_folded ~cnst_only r r' row in
       let init = fold_constant_candidates r r' row m1 i ~init ~f in
@@ -1259,22 +1219,26 @@ let lb_of_movar r' = function
               response_of_attempts rl ru)
 
     let propagate_for_occ r r' occ =
-      intercept_response "propagate_for_occ"
-        (propagate_for_occ r r' occ)
+      propagate_for_occ r r' occ |>
+          intercept_response "propagate_for_occ"
 
     let propagate_for_bvar_aux r r' v =
-      intercept_response "propagate_for_bvar_aux"
-        (let f _ = propagate_for_occ r r' in
-         foldi_responses_occs r v ~f)
+      (let f _ = propagate_for_occ r r' in
+       foldi_responses_occs r v ~f) |>
+          intercept_response "propagate_for_bvar_aux"
+
 	
     let propagate_for_bvar r r' v =
-      intercept_response "propagate_for_bvar"
-        (Option.value_map (S.bderef_local r' v)
-           ~f:(function true ->
-             propagate_for_bvar_aux r r' v
-             | false ->
-               N_Ok)
-           ~default:N_Ok)
+      let f = function
+        | true ->
+          propagate_for_bvar_aux r r' v
+        | false ->
+          N_Ok
+      and default = N_Ok in
+      S.bderef_local r' v |>
+          Option.value_map ~f ~default |>
+              intercept_response "propagate_for_bvar"
+
 	
 (** Mixed Int/Real *)
 
@@ -1466,31 +1430,31 @@ let lb_of_movar r' = function
     let propagate ({r_stats; r_bvar_d; r_ismixed} as r) r' =
       r_stats.s_propagate <- r_stats.s_propagate + 1;
       if r_ismixed then
-	let f = propagate_for_mixed_bvar r r' in
-	intercept_response "propagate_mixed"
-	  (dequeue_fold_responses r_bvar_d ~f)
+	(let f = propagate_for_mixed_bvar r r' in
+	dequeue_fold_responses r_bvar_d ~f) |>
+		intercept_response "propagate_mixed"
       else 
-	let f = propagate_for_bvar r r' in
-	intercept_response "propagate"
-	  (dequeue_fold_responses r_bvar_d ~f)
+	(let f = propagate_for_bvar r r' in
+	 dequeue_fold_responses r_bvar_d ~f) |>
+	 	intercept_response "propagate"
 
 
-    let propagate_mixed ({r_stats; r_bvar_d} as r) r' =
+   (* let propagate_mixed ({r_stats; r_bvar_d} as r) r' =
       r_stats.s_propagate <- r_stats.s_propagate + 1;
       let f = propagate_for_mixed_bvar r r' in
       intercept_response "propagate_mixed"
         (dequeue_fold_responses r_bvar_d ~f)
-
+    *)
 (********************************** check given solution ***********************************************************************************)
         
 (**   Pure Integer   *)
-
+        
     let deref_ovar_sol r' sol = function
       | Some v, o ->
         Int63.(S.ideref_sol r' sol v + o)
       | None, o ->
         o
-	  
+
     let matches_row r' sol row_concrete row =
       Array.for_all2_exn row row_concrete
         ~f:(fun ov c -> Int63.equal (deref_ovar_sol r' sol ov) c)
@@ -1500,12 +1464,12 @@ let lb_of_movar r' = function
         let f ~key ~data acc = acc || List.exists data ~f in
         Map.fold_range_inclusive m1 ~min ~max ~init:false ~f ||
           Map.fold_range_inclusive m2 ~min ~max ~init:false ~f 
-	  
+
     let check_for_occ r r' sol ((row, index, i, _) : occ) =
       let row = Array.map row ~f:(deref_ovar_sol r' sol) in
       let f = matches_row r' sol row in
       exists_index index ~min:row.(i) ~max:row.(i) ~f
-	
+
     let check_for_bvar ({r_occ_h} as r) r' sol v =
       not (S.bderef_sol r' sol v) ||
         for_all_occs r v ~f:(check_for_occ r r' sol)
@@ -1545,20 +1509,20 @@ let lb_of_movar r' = function
       not (S.bderef_sol r' sol v) ||
 	for_all_mixed_occs r v ~f:(check_for_mocc r r' sol)
 
-    let check_mixed ({r_stats; r_bvar_d} as r) r' sol =
+    (*let check_mixed ({r_stats; r_bvar_d} as r) r' sol =
       r_stats.s_check <- r_stats.s_check + 1;
       let f = check_for_bvar_mixed r r' sol in
-      intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
+      intercept_bool "check_mixed" (Dequeue.for_all r_bvar_d ~f)
 
-
+*)
 
 let check ({r_stats; r_bvar_d} as r) r' sol =
       r_stats.s_check <- r_stats.s_check + 1;
       if r.r_ismixed 
       then let f = check_for_bvar_mixed r r' sol in
-	   intercept_bool "check_mixed" (Dequeue.for_all r_bvar_d ~f)
+	  Dequeue.for_all r_bvar_d ~f |> intercept_bool "check_mixed"
       else let f = check_for_bvar r r' sol in
-	   intercept_bool "check" (Dequeue.for_all r_bvar_d ~f)
+	  Dequeue.for_all r_bvar_d ~f |> intercept_bool "check"
 
 
 (********************************************************* branching **********************************************************************)
@@ -1593,13 +1557,11 @@ let check ({r_stats; r_bvar_d} as r) r' sol =
           let middle = Int63.((lb + ub) / (one + one) - o) in
           let middle = Int63.to_float middle
           and range = Int63.to_float ub -. Int63.to_float lb in
-          bool_of_ok_or_fail
-            (S.ibranch r' v 
-               (if n <= 50 && Float.(range <= of_int 50) then
-                   (ignore (range);
-                    middle +. 0.5)
-                else
-                   middle))
+          (if n <= 50 && Float.(range <= of_int 50) then
+              (ignore range;
+               middle +. 0.5)
+           else
+              middle) |> S.ibranch r' v |> bool_of_ok_or_fail
         | None, _ ->
           false
 
@@ -1639,8 +1601,7 @@ let check ({r_stats; r_bvar_d} as r) r' sol =
       let doit v1 v2 x =
         let v = Hashtbl.find r_diff_h (v1, v2) in
         let v = Option.value_exn v ~here:_here_ in
-        let x = Int63.to_float x in
-        bool_of_ok_or_fail (S.ibranch r' v x)
+        Int63.to_float x |> S.ibranch r' v |> bool_of_ok_or_fail
       and d = Int63.(o2 - o1) in
       match v1, v2 with
       | Some v1, Some v2 ->
@@ -1829,7 +1790,7 @@ let check ({r_stats; r_bvar_d} as r) r' sol =
              branch2_mixed r r')
       with
       | e ->
-        (Printf.printf "exception: %s\n%!p" (Exn.to_string e);
+        (Exn.to_string e |> Printf.printf "exception: %s\n%!p";
          raise e)
 
 
@@ -1837,17 +1798,15 @@ let branch ({r_stats} as r) r' =
       try
         r_stats.s_branch <- r_stats.s_branch + 1;
 	if r.r_ismixed then
-	  ok_for_true
-            (branch0_mixed r r' ||
+	    (branch0_mixed r r' ||
                branch0_5_mixed r r' ||
                branch1_mixed r r' ||
-               branch2_mixed r r')    
+               branch2_mixed r r') |> ok_for_true   
 	else  
-	  ok_for_true
-            (branch0 r r' ||
+	    (branch0 r r' ||
                branch0_5 r r' ||
                branch1 r r' ||
-               branch2 r r')
+               branch2 r r') |> ok_for_true
       with
       | e ->
         (Printf.printf "exception: %s\n%!p" (Exn.to_string e);

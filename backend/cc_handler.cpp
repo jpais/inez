@@ -6,8 +6,6 @@
 #include <cstdlib>
 #include <stdint.h>
 
-using boost::unordered::piecewise_construct;
-
 // #define DEBUG
 // #define DEBUG_DESPERATE
 
@@ -159,7 +157,7 @@ void scip_callback_sol::operator()(symbol a, symbol b, llint x)
 
 cc_handler::cc_handler(SCIP* scip, dp* d, cut_gen* c)
   : scip::ObjConshdlr(scip, "cc", "congruence closure",
-                      1, -100000, -100000,
+                      -100000, -100000, -100000,
                       0, 1, 0, -1,
                       TRUE, TRUE, TRUE, FALSE,
                       1),
@@ -178,6 +176,7 @@ cc_handler::cc_handler(SCIP* scip, dp* d, cut_gen* c)
     orig_var_m(),
     dvar_rev_m(),
     dvar_offset_m(),
+    ocaml_dvar_offset_m(),
     node_seen_m(),
     node_seen_ocg_m(),
     loc_m(),
@@ -259,11 +258,12 @@ SCIP_VAR* cc_handler::add_dvar(SCIP_VAR* v1, SCIP_VAR* v2)
   if (it != dvar_m->end()) return it->second;
   
   if (v2) {
-#ifdef DEBUG
-    cout << "[DV] adding dvar for "
-         << var_id(v1) << " and " << var_id(v2) << endl;
-#endif
     dv = scip_dvar(scip, v1, v2);
+#ifdef DEBUG
+    cout << "[DV] " << var_id(dv) << " = "
+         << var_id(v1) << " - " << var_id(v2) << endl;
+#endif
+
     sa(SCIPcaptureVar(scip, dv));
   } else
     dv = v1;
@@ -274,6 +274,26 @@ SCIP_VAR* cc_handler::add_dvar(SCIP_VAR* v1, SCIP_VAR* v2)
 
   return dv;
 
+}
+
+SCIP_VAR* cc_handler::ocaml_add_dvar(SCIP_VAR* v1, SCIP_VAR* v2,
+                                     llint o)
+{
+
+  assert(v1 > v2);
+
+  SCIP_VAR* rval = add_dvar(v1, v2);
+
+  dvar_offset_map::iterator it = ocaml_dvar_offset_m.find(rval);
+
+  if (it != ocaml_dvar_offset_m.end()) {
+    vector<llint>& vlli = it->second;
+    if (!util::vector_exists_eq<llint>(vlli, o)) vlli.push_back(o);
+  } else
+    ocaml_dvar_offset_m.emplace(rval, vector<llint>(1, o));
+
+  return rval;
+  
 }
 
 SCIP_VAR* cc_handler::add_dvar(const scip_ovar& ov1,
@@ -313,6 +333,23 @@ inline SCIP_VAR* cc_handler::get_dvar(SCIP_VAR* v1, SCIP_VAR* v2)
     
 }
 
+inline bool branch_around_val(SCIP* scip, SCIP_VAR* v, llint x)
+{
+
+  SCIP_Real
+    lb = SCIPvarGetLbLocal(v),
+    ub = SCIPvarGetUbLocal(v);
+
+  if ((SCIPisEQ(scip, lb, x) && SCIPisEQ(scip, ub, x)) ||
+      SCIPisLT(scip, ub, x) ||
+      SCIPisGT(scip, lb, x))
+    return false;
+  
+  scip_branch_around_val(scip, v, x);
+  return true;
+
+}
+
 inline bool cc_handler::branch_on_diff(const scip_ovar& ov1,
                                        const scip_ovar& ov2)
 {
@@ -325,22 +362,13 @@ inline bool cc_handler::branch_on_diff(const scip_ovar& ov1,
   assert(v1 > v2);
 
   SCIP_VAR* dv = get_dvar(v1, v2);
-  SCIP_Real
-    lb = SCIPvarGetLbLocal(dv),
-    ub = SCIPvarGetUbLocal(dv);
   llint d = ov2.offset - ov1.offset;
 
-  if ((SCIPisEQ(scip, lb, d) && SCIPisEQ(scip, ub, d)) ||
-      SCIPisLT(scip, ub, d) ||
-      SCIPisGT(scip, lb, d))
-    return false;
-
-  scip_branch_around_val(scip, dv, d);
-  return true;
+  return branch_around_val(scip, dv, d);
 
 }
 
-bool cc_handler::branch_on_diff()
+bool cc_handler::branch_on_cc_diff()
 {
 
   loc_map::iterator it = loc_m.begin();
@@ -356,7 +384,8 @@ bool cc_handler::branch_on_diff()
         const scip_ovar& ov2 = *it2;
         SCIP_VAR* v2 = ov2.base;
         bool branched = v1 > v2 ?
-          branch_on_diff(ov1, ov2) : branch_on_diff(ov2, ov1);
+          branch_on_diff(ov1, ov2) :
+          branch_on_diff(ov2, ov1) ;
         if (branched) return true;
         it2++;
       }
@@ -383,7 +412,7 @@ SCIP_NODE* cc_handler::current_node_ocg()
 void cc_handler::push_frame_ocg(SCIP_NODE* n)
 {
 
-  assert(ocaml_cut_gen);
+  if (!ocaml_cut_gen) return;
   
   frames_ocg.push_back(n);
   ocaml_cut_gen->push_level();
@@ -440,8 +469,7 @@ void cc_handler::rewind_to_frame(SCIP_NODE* node)
   while (true) {
     // assert(!frames.empty());
     // CHECKME
-    if (frames.empty())
-      return;
+    if (frames.empty()) return;
     SCIP_NODE* n = frames.back();
     if (node == n)
       return;
@@ -453,6 +481,11 @@ void cc_handler::rewind_to_frame(SCIP_NODE* node)
 bool cc_handler::node_in_frames(SCIP_NODE* node)
 {
   return (node_seen_m.find(node) != node_seen_m.end());
+}
+
+bool cc_handler::node_in_frames_ocg(SCIP_NODE* node)
+{
+  return (node_seen_ocg_m.find(node) != node_seen_ocg_m.end());
 }
 
 void cc_handler::dbg_print_assignment(SCIP_SOL* sol, SCIP_VAR* v)
@@ -655,19 +688,19 @@ SCIP_RESULT cc_handler::scip_prop_impl(context& c)
            << endl;
 #endif
       c.merge(v1, v2, my_llint(scip, lb_again));
-      if (node_infeasible || !c.get_consistent())
-        return  SCIP_CUTOFF;
+      if (node_infeasible) return SCIP_CUTOFF;
+      if (!c.get_consistent()) return  SCIP_CUTOFF;
     }
     it++;
   }
 
-  if (node_infeasible || !c.get_consistent())
-    return SCIP_CUTOFF;
+  if (node_infeasible) return SCIP_CUTOFF;
+
+  if (!c.get_consistent()) return SCIP_CUTOFF;
 
   if (bound_changed) return SCIP_REDUCEDDOM;
 
-  if (ocaml_dp)
-    return ocaml_dp->propagate();
+  if (ocaml_dp) return ocaml_dp->propagate();
 
   return SCIP_DIDNOTFIND;
   
@@ -778,86 +811,136 @@ SCIP_RETCODE cc_handler::scip_lock
   
 }
 
+bool cc_handler::branch_on_ocaml_diff()
+{
+
+  SCIP*& scip = scip::ObjEventhdlr::scip_;
+
+  dvar_offset_map::iterator it = ocaml_dvar_offset_m.begin();
+
+  while (it != ocaml_dvar_offset_m.end()) {
+
+    SCIP_VAR* dv = it->first;
+
+    SCIP_Real
+      lb = SCIPvarGetLbLocal(dv),
+      ub = SCIPvarGetUbLocal(dv);
+    vector<llint> v = it->second;
+
+    vector<llint>::const_iterator it2 = v.begin();
+
+    while (it2 != v.end()) {
+      const llint& o = *it2;
+      if (branch_around_val(scip, dv, o)) return true;
+      it2++;
+    }
+
+    it++;
+
+  }
+
+  return false;
+  
+}
+
+SCIP_RESULT cc_handler::cut_or_branch(bool cc_feasible)
+{
+  
+  SCIP*& scip = scip::ObjEventhdlr::scip_;
+
+#ifdef DEBUG
+  cout << "[CB] enfolp: trying to cut or branch\n";
+#endif
+
+  if (ocaml_cut_gen) {
+    SCIP_RESULT cg_result = ocaml_cut_gen->generate();
+    switch (cg_result) {
+    case SCIP_DIDNOTFIND:
+      break;
+    case SCIP_CUTOFF:
+    case SCIP_SEPARATED:
+      return cg_result;
+    case SCIP_FEASIBLE:
+      if (cc_feasible) return cg_result;
+      break;
+    default:
+      throw util::ec_case;
+    }
+  }
+
+  /* trying to branch on something that makes sense for CC */
+
+  if (branch_on_cc_diff()) return SCIP_BRANCHED;
+
+  /* trying to branch on something that makes sense for ocaml_dp */
+
+  if (ocaml_dp && ocaml_dp->branch()) return SCIP_BRANCHED;
+
+  /* branch on behalf of theory solvers (on registered diffs) */
+
+#ifdef DEBUG
+  dbg_print_assignment(NULL);
+#endif
+
+  if (branch_on_ocaml_diff()) return SCIP_BRANCHED;
+  
+  /* we are in trouble */
+
+#ifdef DEBUG
+  dbg_print_assignment(NULL);
+#endif
+
+  unreachable();
+  return SCIP_DIDNOTFIND;
+  
+}
+
 SCIP_RETCODE cc_handler::scip_enfolp
 (SCIP* s, SCIP_CONSHDLR* ch, SCIP_CONS** ac,
  int n, int n_useful, SCIP_Bool infeasible, SCIP_RESULT* r)
 {
 
 #ifdef DEBUG
-  cout << "[CB] enfolp\n";
+  cout << "[CB] enfolp" << endl;
+#endif
+
+#ifdef DEBUG_DESPERATE
+  dbg_print_assignment(NULL);
 #endif
 
   ASSERT_SCIP_POINTER(s);
   assert(SCIPgetStage(s) != SCIP_STAGE_PRESOLVING);
 
-  bool unknown = false;
-  
-  if (ocaml_cut_gen) {
-    SCIP_RESULT cg_result = ocaml_cut_gen->generate();
-    switch (cg_result) {
-    case SCIP_CUTOFF:
-      cout << "cutoff!\n";
-      fflush(stdout);
-      *r = cg_result;
-      return SCIP_OKAY;
-    case SCIP_SEPARATED:
-      *r = cg_result;
-      return SCIP_OKAY;
-    case SCIP_FEASIBLE:
-      break;
-    case SCIP_DIDNOTFIND:
-      unknown = true;
-      break;
-    default:
-      throw util::ec_case;
-    }
+  if (scip_check_impl(NULL) == SCIP_FEASIBLE) {
+    *r = cut_or_branch(true);
+    return SCIP_OKAY;
   }
-  
-  *r = scip_check_impl(NULL); 
+    
+#ifdef DEBUG
+  cout << "[CB] enfolp: solution infeasible, trying to propagate\n";
+#endif
 
-  if (*r == SCIP_INFEASIBLE || unknown) {
-#ifdef DEBUG
-    cout
-      << "[CB] enfolp: solution infeasible, trying to propagate\n";
-#endif
-    SCIP_RESULT prop_result = scip_prop_impl(false);
-    switch (prop_result) {
-    case SCIP_DIDNOTFIND: 
-      assert(!node_infeasible);
-      assert(ctx.get_consistent());
-#ifdef DEBUG
-      cout << "[CB] ... failed to propagate\n";
-#endif
-      if (branch_on_diff() || (ocaml_dp && ocaml_dp->branch())) {
-        *r = SCIP_BRANCHED;
-        break;
-      } else {
-        dvar_rev_map::iterator it = dvar_rev_m.begin();
-        while (it != dvar_rev_m.end()) {
-          cout << "[AS] " << var_id(it->first) << " = "
-               << SCIPgetSolVal(s, NULL, it->first) << " in ["
-               << SCIPvarGetLbLocal(it->first) << ", "
-               << SCIPvarGetUbLocal(it->first) << "]\n";
-          it++;
-        }
-        assert(unknown);
-        unreachable();
-        break;
-      }
-      unreachable();
-    case SCIP_REDUCEDDOM:
-      *r = prop_result;
-      break;
-    case SCIP_CUTOFF:
-      *r = prop_result;
-      break;
-    default:
-      throw util::ec_case;
-    }
+  switch (scip_prop_impl(false)) {
+  case SCIP_DIDNOTFIND: 
+    break;
+  case SCIP_REDUCEDDOM:
+  case SCIP_CUTOFF:
+    *r = SCIP_CUTOFF;
+    return SCIP_OKAY;
+  default:
+    throw util::ec_case;
   }
 
+#ifdef DEBUG
+    cout << "[CB] ... failed to propagate\n";
+#endif
+  
+  *r = cut_or_branch(false);
+  assert(!node_infeasible);
+  assert(ctx.get_consistent());
+  assert(*r != SCIP_FEASIBLE);
   return SCIP_OKAY;
-
+  
 }
 
 SCIP_RETCODE cc_handler::scip_enfops
@@ -975,7 +1058,11 @@ void cc_handler::scip_exec_nodefocused_ocg(SCIP_NODE* en)
     return;
   }
 
-  rewind_to_frame_ocg(node_in_frames(pn) ? pn : NULL);
+#ifdef DEBUG
+  cout << "[OC] all the way to the top\n";
+#endif
+
+  rewind_to_frame_ocg(node_in_frames_ocg(pn) ? pn : NULL);
   push_frame_ocg(en);
   return;
 
@@ -991,12 +1078,14 @@ SCIP_RETCODE cc_handler::scip_exec_nodefocused(SCIP_EVENT* e)
 
   assert(!seen_node || en);
 
-  if (ocaml_cut_gen) scip_exec_nodefocused_ocg(en);
+  if (ocaml_cut_gen)
+    scip_exec_nodefocused_ocg(en);
 
   if (frames.empty()) {
     assert(!seen_node);
     seen_node = true;
     push_frame(en);
+    push_frame_ocg(en);
     return SCIP_OKAY;
   }
 
@@ -1057,6 +1146,8 @@ SCIP_RETCODE cc_handler::scip_exec_relaxed
   // tried to be smarter in the past, leading to wrong answers. We
   // cannot dependably whether our state 
 
+  rewind_to_frame_ocg(NULL);
+  push_frame_ocg(cn);
   rewind_to_frame((SCIP_NODE*)NULL);
   push_frame(cn);
   return SCIP_OKAY;
@@ -1204,7 +1295,7 @@ void cc_handler::call(const scip_ovar& r, const string& s,
   uf_call_cnt++;
 
 #ifdef DEBUG
-  cout << var_id(r.base)
+  cout << "[CALL] " << var_id(r.base)
        << (r.offset >= 0 ? '+' : '-')
        << (r.offset >= 0 ? r.offset : -r.offset)
        << " = " << s << '(';
@@ -1448,9 +1539,10 @@ SCIP_VAR* cc_handler_zero_var(cc_handler* c)
 
 SCIP_VAR* cc_handler_add_dvar(cc_handler* c,
                               SCIP_VAR* v1,
-                              SCIP_VAR* v2)
+                              SCIP_VAR* v2,
+                              llint o)
 {
-  return c->add_dvar(v1, v2);
+  return c->ocaml_add_dvar(v1, v2, o);
 }
 
 uintptr_t uintptr_t_of_var(SCIP_VAR* v)

@@ -43,17 +43,32 @@ module type Term_with_ops = sig
 
   val of_int63 : Core.Std.Int63.t -> ('a, int) t
 
+  val fun_id_of_app : ('i, 'r) t ->  'i Id.Box_arrow.t option
+
   (* type utilities *)
 
-  val type_of_t :
-    ('i, 's) t -> f:'i Id.t_arrow_type -> 's Type.t
-  
+  val type_of_t : ('i, 's) t -> 's Type.t
+
+  val is_int : ('i, 's) t -> bool
+
+  val is_bool : ('i, 's) t -> bool
+
+
   (* traversal *)
 
   val fold :
     ('i, 's) t ->
-    init:'a ->
-    f:('a -> 'i atom Formula.t -> 'a) -> 'a
+    init : 'a ->
+    f    : ('a -> 'i atom Formula.t -> 'a) ->
+    'a
+
+  val fold_sum_terms :
+    ('i, int) t ->
+    factor   : Core.Std.Int63.t ->
+    init     : 'a ->
+    f        : ('a -> Core.Std.Int63.t -> ('i, int) t -> 'a) ->
+    f_offset : ('a -> Core.Std.Int63.t -> 'b) ->
+    'b
 
   (* INT infix operators *)
 

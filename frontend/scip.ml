@@ -30,7 +30,11 @@ let compare_var x y =
 let hash_var = uintptr_t_of_var
 
 let sexp_of_var v =
-  Int.sexp_of_t (uintptr_t_of_var v)
+  Sexplib.Conv.sexp_of_string
+    (if compare_var v dummy_var = 0 then
+        "NULL"
+     else
+        sCIPvarGetName v)
 
 let ivar_of_bvar x = x
 
@@ -221,7 +225,8 @@ let create_constraint ({r_ctx} as r) eq l o =
     (sCIPcreateConsBasicLinear r_ctx
        (make_constraint_id r)
        (Array.of_list_map ~f:snd l)
-       (Array.of_list_map ~f:(Fn.compose Int63.to_float fst) l)
+       (let f (x, _) = Int63.to_float x in
+        Array.of_list_map ~f l)
        (-.
            (if eq then
                Float.(neg o)
@@ -277,7 +282,8 @@ let add_indicator ({r_ctx} as r) v l o =
          (make_constraint_id r)
          (var_of_var_signed r v)
          (Array.of_list_map ~f:snd l)
-         (Array.of_list_map ~f:(Fn.compose Int63.to_float fst) l)
+         (let f (x, _) = Int63.to_float x in
+          Array.of_list_map ~f l)
          (Int63.to_float o)) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
@@ -321,8 +327,10 @@ let var_of_var_option {r_cch} =
 let add_call ({r_cch} as r) (v, o) f l =
   Scip_idl.cc_handler_call (Option.value_exn r_cch ~here:_here_)
     (var_of_var_option r v) (Int63.to_int64 o) f
-    (Array.of_list_map l ~f:(Fn.compose (var_of_var_option r) fst))
-    (Array.of_list_map l ~f:(Fn.compose Int63.to_int64 snd))
+    (let f (x, _) = var_of_var_option r x in
+     Array.of_list_map l ~f)
+    (let f (_, x) = Int63.to_int64 x in
+     Array.of_list_map l ~f)
 
 let add_objective {r_ctx; r_has_objective} l =
   if r_has_objective then
@@ -424,7 +432,7 @@ let add_cut_local ({r_ctx} as r) (l, o) =
       (sCIPcreateEmptyRowCons r_ctx
          (sCIPfindConshdlr r_ctx "cc")
          (make_cut_id r)
-         (-. (sCIPinfinity r_ctx)) (Int63.to_float o)
+         (-. (sCIPinfinity r_ctx)) Int63.(to_float (- o))
          true false false) in
   assert_ok _here_ (sCIPcacheRowExtensions r_ctx row);
   assert (not (List.is_empty l));
@@ -454,8 +462,9 @@ let add_real_cut_local ({r_ctx} as r) (l, o) =
 
 (* FIXME : do we really need the Option? *)
 
-let name_diff {r_cch} v1 v2 =
-  Option.(r_cch >>| fun r_cch -> cc_handler_add_dvar r_cch v1 v2)
+let name_diff {r_cch} v1 v2 o =
+  let r_cch = Option.value_exn r_cch ~here:_here_ in
+  Some (cc_handler_add_dvar r_cch v1 v2 (Int63.to_int64 o))
 
 module Types = struct
   type ctx = scip_ctx

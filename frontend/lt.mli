@@ -21,8 +21,7 @@ sig
            and type dvar_plug := Imt.Dvars.t)
 
   type axiom_id
-
-  type occ = axiom_id * Imt.Dvars.t list * int option ref
+  with compare, sexp_of
 
   type instantiator =
     axiom_id -> Imt.Dvars.t list -> Imt.ivar Terminology.iexpr list

@@ -235,7 +235,7 @@ module type Dvars_access = sig
   type ctx_plug
 
   type sol_plug
-
+  
   include (S_int_bounds
            with type ctx := ctx_plug
            and type sol := sol_plug)
@@ -440,6 +440,10 @@ module type S_with_cut_gen = sig
 
     val create_dvar :
       ctx -> ivar option offset -> ivar option offset -> t
+
+    val get_left : ctx -> t -> ivar option offset
+
+    val get_right : ctx -> t -> ivar option offset
 
   end
 

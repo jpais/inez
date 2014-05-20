@@ -1,6 +1,23 @@
 open Core.Std
 open Logic
 
+let dbg = false
+
+let intercept_bool s b =
+  if dbg then Printf.printf "%s: %b\n%!" s b;
+  b
+
+type response_ga = [ `Unknown | `Sat | `Unsat_Cut_Gen | `Cutoff ]
+with sexp_of
+
+let intercept_response_ga s r =
+  if dbg then
+    (r |>
+        sexp_of_response_ga |>
+            Sexplib.Conv.string_of_sexp |>
+                Printf.printf "%s: %s\n%!" s);
+  r
+
 module Make
   
   (Imt : sig
@@ -18,6 +35,7 @@ module Make
 struct
 
   type axiom_id = int
+  with compare, sexp_of
 
   type occ = axiom_id * Imt.Dvars.t list * int option ref
 
@@ -81,7 +99,10 @@ struct
 
     let check {r_axioms_h} r' sol =
       let f ~key ~data = not (check_axiom r' sol key data) in
-      not (Hashtbl.existsi r_axioms_h ~f)
+       not (Hashtbl.existsi r_axioms_h ~f)
+
+    let check r r' sol =
+      check r r' sol |> intercept_bool "check"
 
     let backtrack ({r_axioms_h; r_level} as r) r' =
       assert (r_level >= 0);
@@ -89,8 +110,7 @@ struct
       let f ~key ~data:(occs, _) =
         let f = function
           | (_, _, ({contents = Some level'} as reference)) ->
-            if level' > r.r_level then
-              reference := None
+            if level' > r.r_level then reference := None
           | _ ->
             () in
         Dequeue.iter occs ~f in
@@ -144,56 +164,54 @@ struct
           false in
       List.for_all ~f
 
-    let maybe_met_hypotheses r' = 
+    let not_met_hypotheses r' = 
       let f v =
         match S.Dvars.get_lb_local r' v with
         | Some lb ->
-          Int63.(lb <= zero)
+          Int63.(lb > zero)
         | None ->
-          true in
+          false in
       List.for_all ~f
-
-    (* let gao_with_cut {r_level} r' sol axiom_id cut = *)
 
     let generate_axiom_occ {r_level} r' sol axiom_id f occ =
       let cuts = f axiom_id
       and lb c = Option.value (lb_cut r' c) ~default:Int63.minus_one
-      and ub c = Option.value (ub_cut r' c) ~default:Int63.one in
-      let eval = List.for_all ~f:Int63.(eval_cut r' sol)
-      and exists_cutoff =
-        let f c = Int63.(lb c > zero) in
-        List.exists ~f
-      and all_satisfied =
-        let f c = Int63.(ub c < zero) in
-        List.for_all ~f in
+      and eval = List.for_all ~f:(eval_cut r' sol)
+      and filter_cuts l =
+        let f c =
+          ub_cut r' c |> (
+            let f ub = not Int63.(ub <= zero)
+            and default = true in
+            Option.value_map ~f ~default) in
+        let l = List.filter l ~f in
+        assert (List.length l > 0); l in
       match occ with
-      | _, dvars, {contents = None} ->
-        if met_hypotheses r' dvars then
-          (let l = cuts dvars in
-           if exists_cutoff l then
-             R_Cutoff
-           else if all_satisfied l then
-             R_Sat
-           else if eval l then
-             R_Sat_Cut l
-           else
-             R_Unsat l)
-        else
-          if
-            not (maybe_met_hypotheses r' dvars) || eval (cuts dvars)
-          then
-            R_Sat
-          else
-            R_Unknown
-      | _, dvars, _ ->
+      | _, dvars, {contents = Some _} ->
         if
-          not (met_hypotheses r' dvars) || not (eval (cuts dvars))
+          dbg && not (met_hypotheses r' dvars)
         then
           raise (Unreachable.Exn _here_)
         else
           R_Sat
-
-    type response_ga = [ `Unknown | `Sat | `Unsat_Cut_Gen | `Cutoff ]
+      | _, dvars, _ ->
+        if met_hypotheses r' dvars then
+          let l = cuts dvars
+          and f c = Int63.(lb c > zero) in
+          begin
+            if List.exists l ~f then
+              R_Cutoff
+            else if eval l then
+              R_Sat
+            else
+              R_Unsat (filter_cuts l)
+          end
+        else if
+            not (met_hypotheses_sol r' sol dvars) ||
+              eval (cuts dvars)
+        then
+          R_Sat
+        else (* if not_met_hypotheses r' dvars then *)
+          R_Unknown
 
     let combine_response_ga (r1 : response_ga) (r2 : response_ga) =
       match r1, r2 with
@@ -216,9 +234,8 @@ struct
         | R_Sat ->
           false
         | R_Sat_Cut _ ->
-          (* in theory we could add the cuts generated; SCIP doesn't
+          (* in theory we could add the generated cuts; SCIP doesn't
              like them *)
-          level := Some r_level;
           false
         | R_Unsat l ->
           List.iter l ~f:(S.add_cut_local r');
@@ -235,18 +252,14 @@ struct
       let response = ref `Sat in
       let f a =
         let r = generate_axiom r r' sol a in
+        response := combine_response_ga !response r;
         match r with
-        | `Cutoff ->
-          response := combine_response_ga !response r;
-          true
-        | `Unsat_Cut_Gen ->
-          response := combine_response_ga !response r;
+        | `Cutoff | `Unsat_Cut_Gen ->
           true
         | _ ->
-          response := combine_response_ga !response r;
           false in
       let _ = Hashtbl.exists r_axioms_h ~f in
-      !response
+      !response |> intercept_response_ga "generate"
 
   end
 

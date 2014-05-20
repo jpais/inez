@@ -1,9 +1,8 @@
-module Id' = Id.Make (struct end)
-module S = Mono_solver.Make(Scip.Scip_with_cut_gen)(Id')
+module S = Axiom_solver.Make(Scip.Scip_with_cut_gen)(Id_for_scripts)
+
+type c = Id_for_scripts.c
 
 let ctx = S.make_ctx ()
-
-type c = Id'.c
 
 let constrain =
   S.assert_formula ctx
@@ -12,12 +11,12 @@ let solve () =
   S.solve ctx
 
 let fresh_int_var () =
-  Logic.M.M_Var (Id'.gen_id Type.Y_Int)
+  Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Int)
 
 let fresh_bool_var () =
   Formula.F_Atom
     (Logic.A.A_Bool
-       (Logic.M.M_Var (Id'.gen_id Type.Y_Bool)))
+       (Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Bool)))
 
 let ideref = function
   | Logic.M.M_Var v ->
@@ -33,8 +32,6 @@ let bderef = function
 
 let toi x =
   Logic.M.M_Int (Core.Std.Int63.of_int x)
-
-let gen_id = Id'.gen_id
 
 let string_of_result =
   let open Terminology in
@@ -60,14 +57,12 @@ let minimize o =
 let solve_print_result () =
   print_endline (string_of_result (solve ()))
 
-let mono f =
-  let open Logic in
-  match f (M.M_Int Core.Std.Int63.zero) with
-  | M.M_App (M.M_Var id, M.M_Int z)
-      when Core.Std.Int63.(compare z zero) = 0 ->
-    S.mono_increasing ctx id
-  | _ ->
+let assert_axiom a =
+  match S.assert_axiom ctx a with
+  | `Ok ->
     ()
+  | `Unsupported ->
+    raise (Invalid_argument "unsupported axiom")
 
 let argv =
   if !Sys.interactive then

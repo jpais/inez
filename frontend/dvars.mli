@@ -3,7 +3,8 @@ module Make
   (S : sig
     include Imt_intf.S_ivar
     include Imt_intf.S_int_bounds with type t := ivar
-    val name_diff : ctx -> ivar -> ivar -> ivar option
+    val name_diff :
+      ctx -> ivar -> ivar -> Core.Std.Int63.t -> ivar option
   end) :
 
 sig
@@ -23,6 +24,10 @@ sig
     S.ivar option Terminology.offset ->
     S.ivar option Terminology.offset ->
     t
+
+  val get_left : S.ctx -> t -> S.ivar option Terminology.offset
+
+  val get_right : S.ctx -> t -> S.ivar option Terminology.offset
 
 end
 

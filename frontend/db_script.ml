@@ -1,10 +1,8 @@
-module Id' = Id.Make (struct end)
-
-module S = Db_solver.Make(Scip.Scip_with_dp)(Id')
+module S = Db_solver.Make(Scip.Scip_with_dp)(Id_for_scripts)
 
 let ctx = S.make_ctx `Lazy
 
-type c = Id'.c
+type c = Id_for_scripts.c
 
 let constrain g =
   match S.assert_formula ctx g with
@@ -28,12 +26,12 @@ let solve () =
   S.solve ctx
 
 let fresh_int_var () =
-  Db_logic.M.M_Var (Id'.gen_id Type.Y_Int)
+  Db_logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Int)
 
 let fresh_bool_var () =
   Formula.F_Atom
     (Db_logic.A.A_Bool
-       (Db_logic.M.M_Var (Id'.gen_id Type.Y_Bool)))
+       (Db_logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Bool)))
 
 let fresh_real_var () =  Db_logic.M.M_Var (Id'.gen_id Type.Y_Real)
 
@@ -63,8 +61,6 @@ let tor x =
 
 let to_real x = 
   raise (Failure "TODO: Real numbers not supported yet.")
-
-let gen_id = Id'.gen_id
 
 let string_of_result =
   let open Terminology in

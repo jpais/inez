@@ -1,10 +1,8 @@
-module Id' = Id.Make (struct end)
-module S = Solver.Make(Scip.Scip_basic)(Id')
+module S = Solver.Make(Scip.Scip_basic)(Id_for_scripts)
+
+type c = Id_for_scripts.c
 
 let ctx = S.make_ctx (Scip.Scip_basic.make_ctx ())
-
-type c = Id'.c
- 
 
 let constrain =
   S.assert_formula ctx
@@ -13,12 +11,12 @@ let solve () =
   S.solve ctx
 
 let fresh_int_var () =
-  Logic.M.M_Var (Id'.gen_id Type.Y_Int)
+  Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Int)
 
 let fresh_bool_var () =
   Formula.F_Atom
     (Logic.A.A_Bool
-       (Logic.M.M_Var (Id'.gen_id Type.Y_Bool)))
+       (Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Bool)))
 
 let fresh_real_var () =
   Logic.M.M_Var (Id'.gen_id Type.Y_Real);;
@@ -49,8 +47,6 @@ let toi x =
 
 let tor x =
   Logic.M.M_Real x
-
-let gen_id = Id'.gen_id
 
 let string_of_result =
   let open Terminology in

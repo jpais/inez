@@ -14,19 +14,20 @@ let uf_ast_fun _loc mid mid' (l, rtype) =
   let fold l init =
     let f y acc =
       match y with
-      | Y_Int ->
+      | `Int ->
         <:expr< Type.Y_Int_Arrow $acc$ >>
-      | Y_Bool ->
+      | `Bool ->
         <:expr< Type.Y_Bool_Arrow $acc$ >>
-      | Y_Real -> 
+      | `Real ->
         <:expr< Type.Y_Real_Arrow $acc$ >> in
     ListLabels.fold_right l ~f ~init
   and init =
     match rtype with
-    | Y_Int ->  <:expr< Type.Y_Int >>
-    | Y_Bool -> <:expr< Type.Y_Bool >>
-    | Y_Real -> <:expr< Type.Y_Real >>
-  and ret e = <:expr< $uid:mid$.M.M_Var ($uid:mid'$.gen_id $e$) >> in
+    | `Int ->  <:expr< Type.Y_Int >>
+    | `Bool -> <:expr< Type.Y_Bool >>
+    | `Real -> <:expr< Type.Y_Real >>
+  and ret e =
+    <:expr< $uid:mid$.M.M_Var (Id_for_scripts.gen_id $e$) >> in
   ret (fold l init)
 
 let uf_ast_apps _loc mid init =
@@ -34,11 +35,11 @@ let uf_ast_apps _loc mid init =
     ~f:(fun acc id t ->
       let t =
         match t with
-        | Y_Int ->
+        | `Int ->
           <:expr< $id:id$ >>
-	| Y_Real ->
-	  <:expr< $id:id$ >>
-        | Y_Bool ->
+	  	| `Real ->
+	  	  <:expr< $id:id$ >>
+        | `Bool ->
           <:expr< $uid:mid$.M.M_Bool $id:id$ >> in
       <:expr< $uid:mid$.M.M_App ($acc$, $t$) >>)
 
@@ -48,17 +49,17 @@ let ml_lambda_abstract _loc init =
 
 let uf_maybe_convert _loc mid y e =
   match y with
-  | Y_Bool ->
+  | `Bool ->
     <:expr< Formula.F_Atom ($uid:mid$.A.A_Bool ($e$)) >>
-  | Y_Int ->
+  | `Int ->
     e
-  | Y_Real ->
+  | `Real ->
     e
 
 let uf_ast _loc mid mid' (l, y) =
   let l_ids =
     let f _ = Ast.IdLid (_loc, gensym ()) in
-    List.map f l
+    ListLabels.map l ~f
   and id = gensym ~prefix:"__uf_" () in
   let inside =
     ml_lambda_abstract _loc
@@ -74,19 +75,19 @@ let rec type_of_uf ?acc:(acc = []) =
   | <:expr< fun _ -> $e$ >>
   | <:expr< fun ($lid:_$ : Int) -> $e$ >>
   | <:expr< fun (_ : Int) -> $e$ >> ->
-    type_of_uf ~acc:(Y_Int :: acc) e
+    type_of_uf ~acc:(`Int :: acc) e
   | <:expr< fun (_ : Real) -> $e$ >> ->
     type_of_uf ~acc:(Y_Real :: acc) e
   | <:expr< fun ($lid:_$ : Bool) -> $e$ >>
   | <:expr< fun (_ : Bool) -> $e$ >> ->
-    type_of_uf ~acc:(Y_Bool :: acc) e
+    type_of_uf ~acc:(`Bool :: acc) e
   | <:expr< ~free >>
   | <:expr< (~free : Int) >> ->
-    Some (List.rev acc, Y_Int)
+    Some (ListLabels.rev acc, `Int)
   | <:expr< (~free : Real) >> ->
-    Some (List.rev acc, Y_Real)
+    Some (ListLabels.rev acc, `Real)
   | <:expr< (~free : Bool) >> ->
-    Some (List.rev acc, Y_Bool)
+    Some (ListLabels.rev acc, `Bool)
   | _ ->
     None
 
@@ -107,7 +108,7 @@ let map_uf mid mid' = object
     | Some y ->
       uf_ast loc mid mid' y
     | None ->
-      e)
+      super#expr e)
   | e ->
     super#expr e
 
@@ -189,4 +190,48 @@ let transform_logic mid = function
 let map_logic mid =
   Ast.map_expr (transform_logic mid)
 
+let rec extract_quantifiers e ~acc =
+  match e with
+  | <:expr@loc< ~forall $lid:v$ $g$ >> ->
+    let acc = v :: acc in
+    extract_quantifiers g ~acc
+  | e ->
+    ListLabels.rev acc, e
 
+let bind_quantified _loc l init =
+  let l =
+    let f i = <:binding<
+      $lid:i$ = Id_for_scripts.gen_id Type.Y_Int >> in
+    ListLabels.map l ~f in
+  <:expr< let $list:l$ in $init$ >>
+
+let bind_quantified_as_exprs _loc mid l init =
+  let l =
+    let f i = <:binding< $lid:i$ = $uid:mid$.M.M_Var $lid:i$ >> in
+    ListLabels.map l ~f in
+  <:expr< let $list:l$ in $init$ >>
+
+let rec list_of_quantified _loc l =
+  let init = <:expr< [] >>
+  and f i acc = <:expr< $lid:i$ :: $acc$ >> in
+  ListLabels.fold_right l ~f ~init
+  
+let map_forall mid mid' = object
+
+  inherit Ast.map as super
+  
+  method expr = function
+  | <:expr@loc< ~forall $lid:v$ $e$ >> ->
+    let l, e =
+      let acc = [v] in
+      extract_quantifiers e ~acc in
+    let e = (map_logic_aux mid)#expr e in
+    let e = <:expr@loc< let open $uid:mid'$.Ops in $e$ >> in
+    (<:expr@loc<
+        ($list_of_quantified loc l$,
+         $bind_quantified_as_exprs loc mid l e$) >>) |>
+        bind_quantified loc l
+  | e ->
+    super#expr e
+
+end

@@ -811,7 +811,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
   and flatten_term :
   type s . ctx -> (I.c, s) M.t -> ibflat =
     fun r t ->
-      match M.type_of_t t ~f:I.type_of_t' with
+      match M.type_of_t t with
       | Type.Y_Int ->
         D_Int (flatten_int_term r t)
       | Type.Y_Real ->

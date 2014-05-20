@@ -64,7 +64,7 @@ module Make (I : Id.Accessors) = struct
         let c = r_ids_next in
         r.r_ids_next <- c + 1;
         c in
-      ignore (Hashtbl.find_or_add r_ids (Id.Box.Box id) ~default)
+      Hashtbl.find_or_add r_ids (Id.Box.Box id) ~default |> ignore
       
   and register_ids_atom r a ~polarity =
     match a with
@@ -78,7 +78,7 @@ module Make (I : Id.Accessors) = struct
 
   and register_ids_formula r g =
     let f = register_ids_atom r and polarity = `Both in
-    Formula.iter_non_atomic g ~f ~polarity
+    Formula.iter_atoms g ~f ~polarity
 
   let assert_formula ({r_constraints} as r) g =
     register_ids_formula r g;
@@ -115,7 +115,7 @@ module Make (I : Id.Accessors) = struct
     Printf.fprintf oc "(declare-fun c%d (" data;
     let y = I.type_of_t id in
     let l, r = args_and_ret_of_type [] y in
-    (let f = Fn.compose (output_string oc) string_of_ibtype in
+    (let f x = string_of_ibtype x |> output_string oc in
      List.iter l ~f);
     Printf.fprintf oc " ) %s)\n" (string_of_ibtype r)
 
@@ -123,10 +123,9 @@ module Make (I : Id.Accessors) = struct
     Hashtbl.iter r_ids ~f:(print_declaration oc)
 
   let print_id oc {r_ids} id =
-    Printf.fprintf
-      oc "c%d "
-      (Option.value_exn ~here:_here_
-         (Hashtbl.find r_ids (Id.Box.Box id)))
+    let id = Hashtbl.find r_ids (Id.Box.Box id)
+    and here = _here_ in
+    Option.value_exn ~here id |> Printf.fprintf oc "c%d "
 
   let print_int63 oc x =
     let open Int63 in

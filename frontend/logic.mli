@@ -5,11 +5,13 @@ module Make_term (T : Core.T.T1) :
 
 (* atomic formulas *)
 
-module rec A : (Logic_intf.Atom
-                with type ('i, 's) term_plug := ('i, 's) M.t)
+module rec A :
+  (Logic_intf.Atom
+   with type ('i, 's) term_plug := ('i, 's) M.t)
 
-and M : (Logic_intf.Term_with_ops
-         with type 'i atom = 'i A.t)
+and M :
+  (Logic_intf.Term_with_ops
+   with type 'i atom = 'i A.t)
 
 (* Conversor from Term to Term_with_ops *)
 module Make_term_conv

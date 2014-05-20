@@ -9,7 +9,7 @@ module Make
 
     include Imt_intf.S_int_bounds with type t := ivar
 
-    val name_diff : ctx -> ivar -> ivar -> ivar option
+    val name_diff : ctx -> ivar -> ivar -> Int63.t -> ivar option
 
   end) =
 
@@ -19,7 +19,10 @@ struct
 
   type sol = S.sol
 
-  type t = S.ivar signed option offset
+  type t =
+    S.ivar signed option offset *
+      S.ivar option offset *
+      S.ivar option offset
   with compare, sexp_of
 
   let compare = compare_t
@@ -31,7 +34,7 @@ struct
     sexp_of_t = sexp_of_t
   }
 
-  let create_dvar_base r v1 v2 =
+  let create_dvar_base r v1 v2 o =
     match v1, v2 with
     | Some v1, None ->
       Some (S_Pos v1)
@@ -40,14 +43,15 @@ struct
     | None, None ->
       None
     | Some v1, Some v2 when S.compare_ivar v1 v2 > 0 ->
-      Option.(S.name_diff r v1 v2 >>| (fun v -> S_Pos v))
+      Option.(S.name_diff r v1 v2 o >>| (fun v -> S_Pos v))
     | Some v1, Some v2 when S.compare_ivar v1 v2 < 0 ->
-      Option.(S.name_diff r v2 v1 >>| (fun v -> S_Neg v))
+      Option.(S.name_diff r v2 v1 Int63.(- o) >>| (fun v -> S_Neg v))
     | Some v1, Some v2 ->
       None
 
-  let create_dvar r (v1, o1) (v2, o2) =
-    create_dvar_base r v1 v2, Int63.(o1 - o2)
+  let create_dvar r (v1, o1 as ov1) (v2, o2 as ov2) =
+    let o = Int63.(o1 - o2) in
+    (create_dvar_base r v1 v2 Int63.(- o), o), ov1, ov2
 
   let get_lb_local_base r = function
     | Some (S_Pos v) ->
@@ -69,7 +73,7 @@ struct
     | Some (S_Pos v) ->
       S.ideref_sol r sol v
     | Some (S_Neg v) ->
-      Int63.(- S.ideref_sol r sol v)
+      S.ideref_sol r sol v |> Int63.(~-)
     | None ->
       Int63.zero
 
@@ -95,19 +99,23 @@ struct
     | None ->
       `Infeasible
 
-  let get_lb_local r (dv, o) =
+  let get_lb_local r ((dv, o), _, _) =
     Option.(get_lb_local_base r dv >>| Int63.(+) o)
 
-  let get_ub_local r (dv, o) =
+  let get_ub_local r ((dv, o), _, _) =
     Option.(get_ub_local_base r dv >>| Int63.(+) o)
 
-  let ideref_sol r sol (dv, o) =
-    Int63.(ideref_sol_base r sol dv + o)
+  let ideref_sol r sol ((dv, o), _, _) =
+    ideref_sol_base r sol dv |> Int63.(+) o
 
-  let set_lb_local r (dv, o) x =
+  let set_lb_local r ((dv, o), _, _) x =
     set_lb_local_base r dv Int63.(x - o)
 
-  let set_ub_local r (dv, o) x =
+  let set_ub_local r ((dv, o), _, _) x =
     set_ub_local_base r dv Int63.(x - o)
+
+  let get_left _ (_, ov, _) = ov
+
+  let get_right _ (_, _, ov) = ov
 
 end
