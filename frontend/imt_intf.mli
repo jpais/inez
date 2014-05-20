@@ -454,8 +454,12 @@ module type S_with_cut_gen = sig
        with type ctx_plug := ctx
        and type sol_plug := sol)
 
-    val create_real_dvar :
+    val create_drvar :
       ctx -> rvar option roffset -> rvar option roffset -> t
+
+    val get_left : ctx -> t -> rvar option roffset
+
+    val get_right : ctx -> t -> rvar option roffset
 
   end
 
@@ -496,7 +500,7 @@ module type S_with_cut_gen = sig
       ivar option offset ->
       Dvars.t
 
-    val create_real_dvar :
+    val create_drvar :
       ctx ->
       rvar option roffset ->
       rvar option roffset ->

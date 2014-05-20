@@ -359,14 +359,25 @@ module Make_term_iter (M : Term_with_ops) = struct
         ()
       | M.M_Real _ ->
       	()
+      | M.M_ROI m ->
+	iter m ~f ~fa
       | M.M_Sum (m1, m2) ->
         iter m1 ~f ~fa;
         iter m2 ~f ~fa
+      | M.M_RSum (m1, m2) ->
+	iter m1 ~f ~fa;
+	iter m2 ~f ~fa
       | M.M_Prod (_, m) ->
         iter m ~f ~fa
+      | M.M_RProd (_, m) ->
+	iter m ~f ~fa
       | M.M_Ite (g, m1, m2) ->
         Formula.iter_atoms g ~f:fa ~polarity:`Both;
         iter m1 ~f ~fa;
+        iter m2 ~f ~fa
+      | M.M_RIte (g, m1, m2) ->
+	Formula.iter_atoms g ~f:fa ~polarity:`Both;
+	iter m1 ~f ~fa;
         iter m2 ~f ~fa
       | M.M_Var _ ->
         ()

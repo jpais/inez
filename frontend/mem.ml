@@ -1668,13 +1668,11 @@ let check ({r_stats; r_bvar_d} as r) r' sol =
 		let middle = Int63.((lb + ub) / (one + one) - o) in
 		let middle = Int63.to_float middle
 		and range = Int63.to_float ub -. Int63.to_float lb in
-		bool_of_ok_or_fail
-		  (S.ibranch r' v 
-		     (if n <= 50 && Float.(range <= of_int 50) then
-			 (ignore (range);
-			  middle +. 0.5)
-                      else
-			 middle))
+		(if n <= 50 && Float.(range <= of_int 50) then
+		    (ignore range;
+		     middle +. 0.5)
+		 else
+		    middle) |> S.ibranch r' v |> bool_of_ok_or_fail		    		
               | W_Int (None, _) ->
 		false
 	      | _  -> raise (Failure "Unexpected int value branch_on_mixed_column"))
@@ -1737,8 +1735,8 @@ let check ({r_stats; r_bvar_d} as r) r' sol =
 	let v = Hashtbl.find r_mdiff_h (v1, v2) in
         let v = Option.value_exn v ~here:_here_ in
         (match v with 
-	  | W_Int v -> bool_of_ok_or_fail (S.ibranch r' v x)
-	  | W_Real v -> bool_of_ok_or_fail (S.rbranch r' v x))
+	  | W_Int v  -> S.ibranch r' v x |> bool_of_ok_or_fail
+	  | W_Real v -> S.rbranch r' v x |> bool_of_ok_or_fail)
       in      
       match var1, var2 with
       | W_Int (Some v1, o1), W_Int (Some v2, o2) ->

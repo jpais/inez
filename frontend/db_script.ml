@@ -33,7 +33,8 @@ let fresh_bool_var () =
     (Db_logic.A.A_Bool
        (Db_logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Bool)))
 
-let fresh_real_var () =  Db_logic.M.M_Var (Id'.gen_id Type.Y_Real)
+let fresh_real_var () =  
+  Db_logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Real)
 
 let ideref = function
   | Db_logic.M.M_Var v ->

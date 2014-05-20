@@ -19,7 +19,7 @@ let fresh_bool_var () =
        (Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Bool)))
 
 let fresh_real_var () =
-  Logic.M.M_Var (Id'.gen_id Type.Y_Real);;
+  Logic.M.M_Var (Id_for_scripts.gen_id Type.Y_Real);;
 
 let to_real x = 
   Logic.M.M_ROI x ;;

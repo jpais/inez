@@ -77,7 +77,7 @@ let rec type_of_uf ?acc:(acc = []) =
   | <:expr< fun (_ : Int) -> $e$ >> ->
     type_of_uf ~acc:(`Int :: acc) e
   | <:expr< fun (_ : Real) -> $e$ >> ->
-    type_of_uf ~acc:(Y_Real :: acc) e
+    type_of_uf ~acc:(`Real :: acc) e
   | <:expr< fun ($lid:_$ : Bool) -> $e$ >>
   | <:expr< fun (_ : Bool) -> $e$ >> ->
     type_of_uf ~acc:(`Bool :: acc) e

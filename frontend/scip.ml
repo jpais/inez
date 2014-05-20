@@ -466,6 +466,12 @@ let name_diff {r_cch} v1 v2 o =
   let r_cch = Option.value_exn r_cch ~here:_here_ in
   Some (cc_handler_add_dvar r_cch v1 v2 (Int63.to_int64 o))
 
+
+(* Add a correct implementation for this*)
+let name_real_diff {r_cch} v1 v2 o = 
+  let r_cch = Option.value_exn r_cch ~here:_here_ in
+  Some (cc_handler_add_dvar r_cch v1 v2 Int64.one)
+
 module Types = struct
   type ctx = scip_ctx
   type ivar = var
@@ -646,7 +652,7 @@ module Dvars =
 module Drvars =
   Drvars.Make (struct
     include Dp_access_bounds
-    let name_real_diff = name_diff
+    let name_real_diff = name_real_diff
   end)
 
 module Cut_gen_access = struct
@@ -841,7 +847,7 @@ module Scip_with_cut_gen = struct
 
     let create_dvar = Dvars.create_dvar
 
-    let create_real_dvar = Drvars.create_real_dvar
+    let create_drvar = Drvars.create_drvar
     
   end
 

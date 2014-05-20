@@ -7,6 +7,8 @@ module Make
   (S : Imt_intf.S_access)
   (I : Id.Accessors) =
 
+struct
+
   open Logic
 
   module P = Pre.Make(I)
@@ -176,18 +178,8 @@ module Make
  
   let type_of_term :
   type t . t term -> t Type.t =
-    fun x -> M.type_of_t ~f:I.type_of_t' x
+    fun x -> M.type_of_t x
     
-  type bg_isum = S.ivar isum
-  with compare, sexp_of
-
-  let hashable_bg_isum = {
-    Hashtbl.Hashable.
-    hash = Hashtbl.hash; 
-    compare = compare_bg_isum;
-    sexp_of_t = sexp_of_bg_isum;
-  }
-
   let flat_sum_negate (l, x) =
     List.map l ~f:(Tuple2.map1 ~f:Int63.neg), Int63.neg x
 
