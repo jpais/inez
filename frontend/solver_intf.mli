@@ -11,21 +11,21 @@ module type S = sig
 
   val solve : ctx -> Terminology.result
 
-    val add_objective :
-    ctx -> (c, int) Logic.M.t -> [> `Duplicate | `Ok]
-
-  val add_real_objective :
+  val add_objective :
+    ctx -> (c, 's) Logic.M.t -> [> `Duplicate | `Ok]
+    
+(*  val add_real_objective :
     ctx -> (c, float) Logic.M.t -> [> `Duplicate | `Ok]
-
-   val deref_int :
+*)  
+  val deref_int :
     ctx -> (c, int) Id.t -> Core.Std.Int63.t option
-
+    
   val deref_bool :
     ctx -> (c, bool) Id.t -> bool option
-
+    
   val deref_real :
     ctx -> (c, float) Id.t -> Core.Std.Float.t option 
-
+    
   val write_bg_ctx : ctx -> string -> unit
 
 end

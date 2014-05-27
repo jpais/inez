@@ -113,7 +113,7 @@ module type S_access = sig
 
   (** [add_real_indicator ctx v r] asserts v => (i <= rhs) *)
   val add_real_indicator :
-    ctx -> bvar signed -> (ivar, rvar) lp_type -> Float.t -> unit
+    ctx -> bvar signed -> (ivar, rvar) ireither rsum -> Float.t -> unit
 
   (** [add_clause ctx l] asserts l (viewed as a clause) *)
   val add_clause : ctx -> bvar signed list -> unit
@@ -125,7 +125,7 @@ module type S_access = sig
 
   val add_objective : ctx -> ivar isum -> [ `Duplicate | `Ok ]
 
-  val add_real_objective : ctx -> (ivar, rvar) lp_type -> [ `Duplicate | `Ok ]
+  val add_real_objective : ctx -> (ivar, rvar) ireither rsum -> [ `Duplicate | `Ok ]
 
   val solve : ctx -> result
 

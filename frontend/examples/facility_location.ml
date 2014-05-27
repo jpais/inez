@@ -100,7 +100,7 @@ constrain
   
 
 (* Objective Function *)
-minimize_real
+minimize
 (  ~logicr(~-.(
     (sumr cities ~f:(fun c -> 
            (sumr locations ~f:(fun l -> (profit.(c.c_id).(l.l_id) *. (production c l))))))
@@ -110,7 +110,23 @@ minimize_real
 solve();;
 
 
+
 (* Printing Solution *)
+
+let ideref_print id v =
+  match ideref v with
+  | Some i ->
+    Printf.printf "%s = %s\n" id (Int63.to_string_hum i)
+  | None ->
+    () ;;
+
+let rderef_print id v =
+  match rderef v with
+  | Some i ->
+    Printf.printf "%s = %f\n" id i
+  | None ->
+    () ;;
+
 
 let should_build location =
   match List.nth locations (location-1) with
@@ -133,3 +149,6 @@ let print_production () =
           printf "  ");
 	  printf "\n")
 );;
+
+
+print_production () ;;

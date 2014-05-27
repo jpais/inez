@@ -119,10 +119,6 @@ struct
   type mvar = (S.ivar, S.rvar) ireither
   with compare, sexp_of
 
- (* type movar =  mvar option roffset*)
-
- (* type movar = (S.ivar option, S.rvar option) ireither roffset *)
-
   type movar = (S.ivar option offset, S.rvar option roffset) ireither
 
   type bg_msum = mvar rsum
@@ -216,7 +212,7 @@ struct
     r_ovar_of_iite_m   :  (P.iite, ovar) Hashtbl.t;
     r_orvar_of_iite_m  :  (P.iite, movar) Hashtbl.t;   (*Added*)
     r_q                :  P.formula Dequeue.t;
-    mutable r_obj      :  P.term option;
+    mutable r_obj      :  P.ibflat option; (*P.term option;*)
     mutable r_fun_cnt  :  int;
     mutable r_unsat    :  bool
   }
@@ -310,10 +306,10 @@ struct
 (*  let negate_isum =
     List.map ~f:(Tuple2.map1 ~f:Int63.neg) *)
 
-  let negate_sum = function
+ (* let negate_sum = function
     | LP_Int s -> LP_Int (List.map ~f:(Tuple2.map1 ~f:Int63.neg) s)
-    | LP_Mix s -> LP_Mix (List.map ~f:(Tuple2.map1 ~f:(Float.neg)) s)
-
+    | LP_Mix s -> LP_Mix (List.map ~f:(Tuple2.map1 ~f:Float.neg) s)
+ *)
 
   (* linearizing terms and formulas: mutual recursion, because terms
      contain formulas and vice versa *)
@@ -362,7 +358,7 @@ struct
 	  List.fold_left ~init ~f l) in
     l, Float.(o' + o)
       
-  and iexpr_of_flat_term r = function
+(*  and iexpr_of_flat_term r = function
     | P.G_SumM s -> let l, o = iexpr_of_sum_mixed r s in
 		    (LP_Mix l), o
     | P.G_Base b ->
@@ -377,36 +373,80 @@ struct
         (LP_Mix []), x)
     | P.G_Sum s -> let l, o = iexpr_of_sum r s in    
                    (LP_Int l), (Int63.to_float o)
+*)
+
+  and iexpr_of_flat_term r = function
+    | P.G_Sum s -> iexpr_of_sum r s                    
+    | P.G_Base b ->
+      (match ovar_of_flat_term_base r b with
+	| Some v , x ->
+          [Int63.one, v], x
+	| None, x ->
+	  [], x)   
+    | P.G_SumM s -> raise (Failure "Unexpected case G_SumM for iexpr_of_flat_term")
+  
+    
+  and iexpr_of_flat_mixed_term r = function
+    | P.G_SumM s -> iexpr_of_sum_mixed r s
+    | P.G_Base b -> 
+      (match ovar_of_flat_term_base_mixed r b with
+	| W_Int (Some v , x) ->
+          [Float.(1.0), W_Int v], (Int63.to_float x)
+	| W_Real (Some v, x) ->
+          [Float.(1.0), W_Real v], x
+	| W_Int (None,x) ->
+	  [], (Int63.to_float x)
+	| W_Real (None, x) ->
+          [], x)
+    | P.G_Sum s -> raise (Failure "Unexpected case G_Sum for iexpr_of_flat_mixed_term")
+
 
    and blast_le ?v ({r_ctx} as r) s =
     let l, o = iexpr_of_sum r s in
-    let l' = (LP_Int l)
-    and o' = Int63.to_float o
-    and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
-    S.add_real_indicator r_ctx (S_Pos v) l' (Float.neg o');
-    S.add_real_indicator r_ctx (S_Neg v) (negate_sum l') Float.(o' - 1.0);
+    let neg_l = List.map ~f:(Tuple2.map1 ~f:Int63.neg) l 
+    and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in    
+    S.add_indicator r_ctx (S_Pos v) l (Int63.neg o);
+    S.add_indicator r_ctx (S_Neg v) neg_l Int63.(o - one);
     S_Pos (Some v)
  
   and blast_le_mixed ?v ({r_ctx} as r) s =
     let l,o = iexpr_of_sum_mixed r s in
-    let l' = (LP_Mix l)
+    let neg_l = List.map ~f:(Tuple2.map1 ~f:Float.neg) l
     and v = match v with Some v -> v | _ -> S.new_bvar r_ctx in
-    S.add_real_indicator r_ctx (S_Pos v) l' (Float.neg o);
-    S.add_real_indicator r_ctx (S_Neg v) (negate_sum l') Float.(o - 1.0);
+    S.add_real_indicator r_ctx (S_Pos v) l (Float.neg o);
+    S.add_real_indicator r_ctx (S_Neg v) neg_l Float.(o - 1.0);
     S_Pos (Some v)
   
 
   and blast_eq_mixed ({r_ctx} as r) s =
     let l, o = iexpr_of_sum_mixed r s in
-    let l' = (LP_Mix l) in
-    blast_eq_aux r_ctx l' o
+    let l_neg = List.map ~f:(Tuple2.map1 ~f:Float.neg) l in
+    let b = S.new_bvar r_ctx in
+    let b_lt = S_Pos (S.new_bvar r_ctx)
+    and b_gt = S_Pos (S.new_bvar r_ctx)
+    and b_eq = S_Pos b in
+    S.add_real_indicator r_ctx b_eq l (Float.neg o);
+    S.add_real_indicator r_ctx b_eq l_neg o;
+    S.add_real_indicator r_ctx b_lt l Float.(neg o - 1.0);
+    S.add_real_indicator r_ctx b_gt l_neg Float.(o - 1.0);
+    S.add_clause r_ctx [b_eq; b_lt; b_eq];
+    S_Pos (Some b)
 
   and blast_eq ({r_ctx} as r) s =
     let l, o = iexpr_of_sum r s in
-    let l' = (LP_Int l) in
-    blast_eq_aux r_ctx l' (Int63.to_float o)
+    let l_neg = List.map ~f:(Tuple2.map1 ~f:Int63.neg) l
+    and b = S.new_bvar r_ctx in
+    let b_lt = S_Pos (S.new_bvar r_ctx)
+    and b_gt = S_Pos (S.new_bvar r_ctx)
+    and b_eq = S_Pos b in
+    S.add_indicator r_ctx b_eq l (Int63.neg o);
+    S.add_indicator r_ctx b_eq l_neg o;
+    S.add_indicator r_ctx b_lt l Int63.(neg o - one);
+    S.add_indicator r_ctx b_gt l_neg Int63.(o - one);
+    S.add_clause r_ctx [b_eq; b_lt; b_eq];
+    S_Pos (Some b)
 
-  and blast_eq_aux r_ctx l o =
+ (* and blast_eq_aux r_ctx l o =
     let l_neg = negate_sum l in
     let b = S.new_bvar r_ctx in
     let b_lt = S_Pos (S.new_bvar r_ctx)
@@ -418,6 +458,7 @@ struct
     S.add_real_indicator r_ctx b_gt l_neg Float.(o - 1.0);
     S.add_clause r_ctx [b_eq; b_lt; b_eq];
     S_Pos (Some b) 
+ *)
 
   and var_of_app ({r_ctx; r_call_m} as r) f_id l t =
     let f = get_f r f_id
@@ -438,19 +479,17 @@ struct
 
   and blast_ite_branch ({r_ctx} as r) xv v e =
     let l, o = iexpr_of_flat_term r e in
-    let l' = (match l with
-              | LP_Int s -> LP_Int ((Int63.minus_one, v) :: s)
-              | LP_Mix s -> raise (Failure "blast_ite_branch: Only for ILP cases")) in
-    S.add_real_indicator r_ctx xv  l'                (Float.neg o);
-    S.add_real_indicator r_ctx xv  (negate_sum l')  o
+    let l' =  ((Int63.minus_one, v) :: l) in
+    let neg_l = List.map ~f:(Tuple2.map1 ~f:Int63.neg) l' in              
+    S.add_indicator r_ctx xv  l' (Int63.neg o);
+    S.add_indicator r_ctx xv neg_l  o
 
   and mixed_blast_ite_branch ({r_ctx} as r) xv v e =
-    let l, o = iexpr_of_flat_term r e in
-    let l'= (match l with
-              | LP_Int s -> raise (Failure "mixed_blast_ite_branch: Only for MILP cases")
-              | LP_Mix s -> LP_Mix ((Float.(-1.0), v) :: s)) in
+    let l, o = iexpr_of_flat_mixed_term r e in
+    let l' = ((Float.(-1.0), v) :: l) in
+    let neg_l = List.map ~f:(Tuple2.map1 ~f:Float.neg) l' in
     S.add_real_indicator r_ctx xv l' (Float.neg o);
-    S.add_real_indicator r_ctx xv (negate_sum l') o
+    S.add_real_indicator r_ctx xv neg_l o
 
   and ovar_of_ite ({r_ctx; r_ovar_of_iite_m} as r) ((g, s, t) as i) =
     let default () =
@@ -544,8 +583,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       (match iexpr_of_sum_mixed r s with
       | [], o ->
         W_Real (None, o)
-   (*   | [c, W_Int x], o when Float.(c = Float.(1.0)) ->
-        W_Int (Some x), o *)
       | [c, W_Real x], o when Float.(c = Float.(1.0)) ->
         W_Real (Some x, o)     
       | l, o ->
@@ -606,8 +643,6 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
       (match iexpr_of_sum r s with
       | [], o ->
         W_Int (None, o)
-(* | [c, x], o when Int63.(c = Int63.one) ->
-(W_Int (Some x, o)) *)
       | l, o ->
         let v = S.new_ivar r_ctx mip_type_int in
         S.add_eq r_ctx ((Int63.minus_one, v) :: l) (Int63.neg o);
@@ -842,28 +877,47 @@ and ovar_of_term_mixed ({r_ctx; r_rvar_of_rsum_m} as r) = function
     match r_obj, r.r_unsat with
     | _, true ->
       R_Unsat
-    | Some o, false ->
+    | Some (D_Int o), false ->
       let l, _ = iexpr_of_flat_term r o in
+      (match S.add_objective r_ctx l with
+      | `Duplicate ->
+        raise (Unreachable.Exn _here_)
+      | `Ok ->
+        S.solve r_ctx)
+    | Some (D_Real o), false ->
+      let l, _ = iexpr_of_flat_mixed_term r o in
       (match S.add_real_objective r_ctx l with
       | `Duplicate ->
         raise (Unreachable.Exn _here_)
       | `Ok ->
         S.solve r_ctx)
+    | Some (D_Bool o), false ->
+      raise (Unreachable.Exn _here_)
     | None, false ->
       S.solve r_ctx
 
-   let add_objective ({r_obj; r_pre_ctx} as r) o =
+(*   let add_objective ({r_obj; r_pre_ctx} as r) o =
     match r_obj with
     | None ->
       let m = P.flatten_int_term r_pre_ctx o in
       r.r_obj <- Some m; `Ok
     | Some _ ->
       `Duplicate
+*)
+
+ let add_objective ({r_obj; r_pre_ctx} as r) o =
+    match r_obj with
+    | None ->
+      let m = P.flatten_term r_pre_ctx o in
+      r.r_obj <- Some m; `Ok
+    | Some _ ->
+      `Duplicate
+
 
   let add_real_objective ({r_obj; r_pre_ctx} as r) o =
     match r_obj with
     | None ->
-      let m = P.flatten_mixed_term r_pre_ctx o in
+      let m = P.flatten_term r_pre_ctx o in
       r.r_obj <- Some m; `Ok
     | Some _ ->
       `Duplicate

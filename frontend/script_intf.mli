@@ -9,9 +9,9 @@ module type S = sig
     c atom_plug Formula.t -> unit
 
   val minimize :
-    (c, int) term_plug -> unit
+    (c, 's) term_plug -> unit
 
-  val minimize_real : (c, float) term_plug -> unit
+(*  val minimize_real : (c, float) term_plug -> unit *)
 
   val solve : unit -> Terminology.result
 

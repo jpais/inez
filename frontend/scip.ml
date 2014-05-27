@@ -287,7 +287,7 @@ let add_indicator ({r_ctx} as r) v l o =
          (Int63.to_float o)) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
-let add_real_indicator ({r_ctx} as r) v l o =
+(** let add_real_indicator ({r_ctx} as r) v l o =
   let variables, coeffs = match l with
     | LP_Int s -> 
       Array.of_list_map ~f:snd s, 
@@ -307,6 +307,25 @@ let add_real_indicator ({r_ctx} as r) v l o =
 	 (coeffs)
 	 o) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
+*)
+
+let add_real_indicator ({r_ctx} as r) v l o =
+  let variables, coeffs = 
+      Array.of_list_map ~f:(fun x ->
+	(match (snd x) with
+	  | W_Int c -> c
+	  | W_Real c -> c)) l,
+      Array.of_list_map ~f:fst l in
+  let c =
+    assert_ok1 _here_
+      (sCIPcreateConsBasicIndicator r_ctx
+	 (make_constraint_id r)
+	 (var_of_var_signed r v)
+	 (variables)
+	 (coeffs)
+	 o) in
+  assert_ok _here_ (sCIPaddCons r_ctx c)
+
 
 let add_clause ({r_ctx; r_constraints_n} as r) l =
   let c =
@@ -345,6 +364,17 @@ let add_objective {r_ctx; r_has_objective} l =
 let add_real_objective {r_ctx; r_has_objective} l =
   if r_has_objective then
     `Duplicate
+  else 
+    (List.iter l
+       ~f:(fun (c, v) ->
+	 let x = (match v with | W_Int x -> x | W_Real x -> x) in
+	 assert_ok _here_ (sCIPchgVarObj r_ctx x c));
+     `Ok)
+
+
+(*let add_real_objective {r_ctx; r_has_objective} l =
+  if r_has_objective then
+    `Duplicate
   else match l with
         | LP_Int s -> (List.iter s
                         ~f:(fun (c, v) ->
@@ -357,6 +387,7 @@ let add_real_objective {r_ctx; r_has_objective} l =
 			    assert_ok _here_ (sCIPchgVarObj r_ctx x c));
 			`Ok)
 
+*)
 let result_of_status = function
   | SCIP_STATUS_OPTIMAL ->
     R_Opt
