@@ -2,7 +2,7 @@ open Core.Std
 open Terminology
 open Bounds
 
-let dbg = true
+let dbg = false
 
 module Zom = struct
 

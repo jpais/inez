@@ -20,9 +20,6 @@ let minimize m =
   | `Out_of_fragment ->
     raise (Invalid_argument "minimize: term out of fragment")
 
-
-let minimize_real o = () (* TODO: Add body to the function or merge with minimize *)
-
 let solve () =
   S.solve ctx
 
@@ -63,6 +60,8 @@ let tor x =
 
 let to_real x = 
   raise (Failure "TODO: Real numbers not supported yet.")
+  
+let toi63 x = Db_logic.M.M_Int x
 
 let gen_id = Id_for_scripts.gen_id
 

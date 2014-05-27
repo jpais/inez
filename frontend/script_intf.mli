@@ -39,6 +39,9 @@ module type S = sig
 
   val to_real :  (c, int) term_plug ->  (c, float) term_plug
 
+  val toi63 :
+    Core.Std.Int63.t -> (c, int) term_plug
+
   val string_of_result : Terminology.result -> string
 
   val solve_print_result : unit -> unit

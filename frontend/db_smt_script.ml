@@ -20,8 +20,6 @@ let minimize m =
   | `Out_of_fragment ->
     raise (Invalid_argument "minimize: term out of fragment")
 
-let minimize_real o = () (* TODO: Add body to the function or merge with minimize *)
-
 let solve () =
   S.solve ctx
 
@@ -62,6 +60,8 @@ let toi x =
 
 let tor x =
   Db_logic.M.M_Real x
+
+let toi63 x = Db_logic.M.M_Int x
 
 let string_of_result =
   let open Terminology in
