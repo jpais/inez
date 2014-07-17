@@ -37,7 +37,7 @@ struct
 
   type logic = Q_Lia | Q_Uflia | Q_Idl | Q_Ufidl
 
-  type status = K_Sat | K_Unsat
+  type status = K_Sat | K_Unsat | K_Unknown
 
   type ctx = {
     mutable r_logic       :  logic option;
@@ -86,16 +86,19 @@ struct
 
   let check_status ({r_status} as r) s x =
     match r_status, s with
-    | Some _, _ ->
-      R.P_Syntax
+    | Some _, _ -> 
+      R.P_Syntax 
     | None, "sat" ->
       r.r_status <- Some K_Sat;
       R.P_Ok x
     | None, "unsat" ->
       r.r_status <- Some K_Unsat;
       R.P_Ok x
+    | None, "unknown" ->
+      r.r_status <- Some K_Unknown;
+      R.P_Ok x
     | None, _ ->
-      R.P_Syntax
+      R.P_Syntax 
 
   let check_result {r_status} e =
     match r_status, e with
@@ -158,7 +161,9 @@ struct
       R.P_Unsupported
     | [S_Atom L.K_Check_Sat] ->
       r.r_sat_called <- true;
-      check_result r (S.solve r_ctx)
+      let result = S.solve r_ctx in
+      S.write_bg_ctx r_ctx (String.concat [Sys.argv.(1);".log"]);
+      check_result r result   
     | [S_Atom L.K_Declare_Fun; S_Atom L.K_Symbol id; S_List l; t] ->
       parse_declare_fun r id l t
     | [S_Atom L.K_Assert; c] ->
@@ -170,8 +175,7 @@ struct
         R.P_Ok None)
     | [S_Atom L.K_Exit] ->
       exit 0
-    | _ ->
-      R.P_Syntax
+    | _ -> R.P_Syntax
 
   let rec do_statements r r' ~f ~f_err =
     match get_smtlib_sexp r with

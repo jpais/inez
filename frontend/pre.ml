@@ -899,7 +899,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     | Formula.F_And (_, _) as g ->
       make_conj r (flatten_conjunction r [] g)
 
-  and flatten_formula_dbg ({r_fmemo_h} as r) g =
+  and flatten_formula ({r_fmemo_h} as r) g =
     let rval =
       Hashtbl.find_or_add r_fmemo_h g
         ~default:(fun () -> flatten_formula_aux r g) in
@@ -907,7 +907,7 @@ and flatten_int_term_sum r (d, x) k (t : (_, int) M.t) =
     print_newline ();
     rval
 
-  and flatten_formula ({r_fmemo_h} as r) g =
+  and flatten_formula_dbg ({r_fmemo_h} as r) g =
     Hashtbl.find_or_add r_fmemo_h g
       ~default:(fun () -> flatten_formula_aux r g)
 

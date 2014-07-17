@@ -11,7 +11,7 @@ let constrain g =
   | `Out_of_fragment ->
     raise (Invalid_argument "constrain: formula out of fragment")
 
-let minimize m =
+let minimize (m : (c, 's) Db_logic.M.t) =
   match S.add_objective ctx m with
   | `Ok ->
     ()

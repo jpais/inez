@@ -262,7 +262,7 @@ OCamlTop(inez, terminology unreachable dvars drvars scip_idl scip util		\
          formula type id id_for_scripts logic camlp4_maps pa_logic	\
          pre solver script, native_utils scip_idl_stubs)
 
-MyOCamlProgram(inez-smt, terminology unreachable dvars scip_idl scip	\
+MyOCamlProgram(inez-smt, terminology unreachable dvars drvars scip_idl scip	\
                util formula type id id_for_scripts logic pre solver	\
                smtlib_lexer smtlib_parser smtlib_solver smtlib_main,	\
                native_utils scip_idl_stubs)

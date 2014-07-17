@@ -67,6 +67,8 @@ and get_smtlib_sexp ?token r =
 
 type 'c ibterm = (('c, int) M.t, 'c A.t F.t) ibeither
 
+type 'c irbterm = (('c, int) M.t, ('c, float) M.t, 'c A.t F.t) irbeither
+
 type 'c tbox = 'c Box.t
 
 type 'c env = {
@@ -123,7 +125,7 @@ let rec parse_nonlist {e_find; e_type} = function
       | _ ->
         raise (Smtlib_Exn (Printf.sprintf "%s is a function" s)))
   | _ ->
-    raise (Smtlib_Exn "syntax error")
+    raise (Smtlib_Exn "Syntax error: nonlist")
 
 let rec parse_let init l e =
   let m =
@@ -136,7 +138,7 @@ let rec parse_let init l e =
         | H_Bool e ->
           e_replace id (lbx (term_of_formula e)))
       | _ ->
-        raise (Smtlib_Exn "syntax error")) in
+        raise (Smtlib_Exn "Syntax error: let")) in
   parse m e
 
 and parse_int m e =
@@ -158,7 +160,7 @@ and parse_eq m e1 e2 =
     ~fi:(fun e1 e2 -> F.F_Atom (A.A_Eq M.(e1 - e2)))
     ~fb:(fun e1 e2 -> Ops.((e1 => e2) && (e2 => e1)))
 
-and parse_mult m l =
+(* and parse_mult m l =
   match
     List.fold_left l
       ~init:(None, Int63.one)
@@ -175,6 +177,18 @@ and parse_mult m l =
     H_Int (M.(c * v))
   | None, c ->
     H_Int (M.of_int63 c)
+*)
+and parse_mult m = function
+  | [S_Atom (L.K_Int i); e]
+  | [e; S_Atom (L.K_Int i)] ->
+    H_Int Ops.(i * parse_int m e)
+  | [S_List [S_Atom L.K_Symbol "-"; S_Atom (L.K_Int i)];e]
+  | [e;S_List [S_Atom L.K_Symbol "-"; S_Atom (L.K_Int i)]] ->
+    H_Int (Ops.( * ) (Int63.(~-) i) (parse_int m e))
+  | _ ->
+    raise (Smtlib_Exn "Syntax error: non-linear term")  
+
+
 
 and parse_app_aux :
 type t . 'c env -> ('c, t) M.t -> t Type.t ->
@@ -183,7 +197,7 @@ type t . 'c env -> ('c, t) M.t -> t Type.t ->
     match t, l with
     (* base cases *)
     | Type.Y_Int, [] ->
-      H_Int f
+      H_Int f  
     | Type.Y_Bool, [] ->
       H_Bool (F.F_Atom (A.A_Bool f))
     (* erroneous base cases *)
@@ -191,6 +205,8 @@ type t . 'c env -> ('c, t) M.t -> t Type.t ->
       raise (Smtlib_Exn "wrong number of arguments")
     | Type.Y_Bool, _ ->
       raise (Smtlib_Exn "wrong number of arguments")
+    | Type.Y_Real, _ ->
+      raise (Smtlib_Exn "Real number parsing not implemented")
     (* recursive cases *)
     | Type.Y_Int_Arrow t, a :: l ->
       let a = parse_int m a in
@@ -203,6 +219,46 @@ type t . 'c env -> ('c, t) M.t -> t Type.t ->
       raise (Smtlib_Exn "wrong number of arguments")
     | Type.Y_Bool_Arrow _, [] ->
       raise (Smtlib_Exn "wrong number of arguments")
+    | Type.Y_Real_Arrow _, _ ->
+      raise (Smtlib_Exn "Real function parsing not implemented")
+
+
+(** and parse_app_aux :
+type t . 'c env -> ('c, t) M.t -> t Type.t ->
+  smtlib_sexp list -> 'c irbterm =
+  fun m f t l ->
+    match t, l with
+    (* base cases *)
+    | Type.Y_Int, [] ->
+      D_Int f
+    | Type.Y_Real, [] ->
+      D_Real f
+    | Type.Y_Bool, [] ->
+      D_Bool (F.F_Atom (A.A_Bool f))
+    (* erroneous base cases *)
+    | Type.Y_Int, _ ->
+      raise (Smtlib_Exn "wrong number of arguments")
+    | Type.Y_Bool, _ ->
+      raise (Smtlib_Exn "wrong number of arguments")
+    (* recursive cases *)
+    | Type.Y_Int_Arrow t, a :: l ->
+      let a = parse_int m a in
+      parse_app_aux m (M.M_App (f, a)) t l
+    | Type.Y_Bool_Arrow t, a :: l ->
+      let a = parse_bool m a in
+      parse_app_aux m (M.M_App (f, term_of_formula a)) t l
+    (* erroneous recursive cases *)    
+    | Type.Y_Int_Arrow _, [] ->
+      raise (Smtlib_Exn "Wrong number of arguments")
+    | Type.Y_Bool_Arrow _, [] ->
+      raise (Smtlib_Exn "Wrong number of arguments")
+    | Type.Y_Real_Arrow _, [] ->
+      raise (Smtlib_Exn "Wrong number of arguments")
+    | Type.Y_Real_Arrow t, a :: l ->
+      raise (Smtlib_Exn "Real function not implemented")
+
+*)
+
 
 and parse_app ({e_find; e_type} as m) s l =
   match e_find s with
@@ -247,7 +303,7 @@ and parse m = function
       and f acc e = Ops.(parse_bool m e => acc) in
       H_Bool (List.fold_left d ~init ~f)
     | _ ->
-      raise (Smtlib_Exn "syntax error"))
+      raise (Smtlib_Exn "Syntax error: =>"))
   | S_List [S_Atom L.K_Symbol "not"; e] ->
     H_Bool (F.not (parse_bool m e))
   (* bool-from-int cases *)
@@ -280,4 +336,4 @@ and parse m = function
   | S_List (S_Atom L.K_Symbol s :: l) ->
     parse_app m s l
   | _ ->
-    raise (Smtlib_Exn "syntax error")
+    raise (Smtlib_Exn "Syntax error: general case")

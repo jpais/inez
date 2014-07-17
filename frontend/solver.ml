@@ -303,14 +303,6 @@ struct
     | S_Pos x -> S_Neg x
     | S_Neg x -> S_Pos x
 
-(*  let negate_isum =
-    List.map ~f:(Tuple2.map1 ~f:Int63.neg) *)
-
- (* let negate_sum = function
-    | LP_Int s -> LP_Int (List.map ~f:(Tuple2.map1 ~f:Int63.neg) s)
-    | LP_Mix s -> LP_Mix (List.map ~f:(Tuple2.map1 ~f:Float.neg) s)
- *)
-
   (* linearizing terms and formulas: mutual recursion, because terms
      contain formulas and vice versa *)
 
@@ -356,24 +348,7 @@ struct
 		  l, Float.(o + c * x))
 	  and init = [], Float.zero in
 	  List.fold_left ~init ~f l) in
-    l, Float.(o' + o)
-      
-(*  and iexpr_of_flat_term r = function
-    | P.G_SumM s -> let l, o = iexpr_of_sum_mixed r s in
-		    (LP_Mix l), o
-    | P.G_Base b ->
-     (match ovar_of_flat_term_base_mixed r b with
-      | W_Int (Some v , x) ->
-        (LP_Mix [Float.(1.0), W_Int v]), (Int63.to_float x)
-      | W_Real (Some v, x) ->
-        (LP_Mix [Float.(1.0), W_Real v]), x
-      | W_Int (None,x) ->
-	(LP_Mix []), (Int63.to_float x)
-      | W_Real (None, x) ->
-        (LP_Mix []), x)
-    | P.G_Sum s -> let l, o = iexpr_of_sum r s in    
-                   (LP_Int l), (Int63.to_float o)
-*)
+    l, Float.(o' + o)     
 
   and iexpr_of_flat_term r = function
     | P.G_Sum s -> iexpr_of_sum r s                    
@@ -445,20 +420,6 @@ struct
     S.add_indicator r_ctx b_gt l_neg Int63.(o - one);
     S.add_clause r_ctx [b_eq; b_lt; b_eq];
     S_Pos (Some b)
-
- (* and blast_eq_aux r_ctx l o =
-    let l_neg = negate_sum l in
-    let b = S.new_bvar r_ctx in
-    let b_lt = S_Pos (S.new_bvar r_ctx)
-    and b_gt = S_Pos (S.new_bvar r_ctx)
-    and b_eq = S_Pos b in
-    S.add_real_indicator r_ctx b_eq l (Float.neg o);
-    S.add_real_indicator r_ctx b_eq l_neg o;
-    S.add_real_indicator r_ctx b_lt l Float.(neg o - 1.0);
-    S.add_real_indicator r_ctx b_gt l_neg Float.(o - 1.0);
-    S.add_clause r_ctx [b_eq; b_lt; b_eq];
-    S_Pos (Some b) 
- *)
 
   and var_of_app ({r_ctx; r_call_m} as r) f_id l t =
     let f = get_f r f_id

@@ -287,28 +287,6 @@ let add_indicator ({r_ctx} as r) v l o =
          (Int63.to_float o)) in
   assert_ok _here_ (sCIPaddCons r_ctx c)
 
-(** let add_real_indicator ({r_ctx} as r) v l o =
-  let variables, coeffs = match l with
-    | LP_Int s -> 
-      Array.of_list_map ~f:snd s, 
-      Array.of_list_map ~f:(Fn.compose Int63.to_float fst) s
-    | LP_Mix s -> 
-      Array.of_list_map ~f:(fun x ->
-	(match (snd x) with
-	  | W_Int c -> c
-	  | W_Real c -> c)) s,
-      Array.of_list_map ~f:fst s in
-  let c =
-    assert_ok1 _here_
-      (sCIPcreateConsBasicIndicator r_ctx
-	 (make_constraint_id r)
-	 (var_of_var_signed r v)
-	 (variables)
-	 (coeffs)
-	 o) in
-  assert_ok _here_ (sCIPaddCons r_ctx c)
-*)
-
 let add_real_indicator ({r_ctx} as r) v l o =
   let variables, coeffs = 
       Array.of_list_map ~f:(fun x ->
@@ -371,23 +349,6 @@ let add_real_objective {r_ctx; r_has_objective} l =
 	 assert_ok _here_ (sCIPchgVarObj r_ctx x c));
      `Ok)
 
-
-(*let add_real_objective {r_ctx; r_has_objective} l =
-  if r_has_objective then
-    `Duplicate
-  else match l with
-        | LP_Int s -> (List.iter s
-                        ~f:(fun (c, v) ->
-                             let c = Int63.to_float c in
-                             assert_ok _here_ (sCIPchgVarObj r_ctx v c));
-                      `Ok)
-	| LP_Mix s ->  (List.iter s
-			  ~f:(fun (c, v) ->
-			    let x = (match v with | W_Int x -> x | W_Real x -> x) in
-			    assert_ok _here_ (sCIPchgVarObj r_ctx x c));
-			`Ok)
-
-*)
 let result_of_status = function
   | SCIP_STATUS_OPTIMAL ->
     R_Opt
@@ -408,6 +369,7 @@ let write_ctx {r_ctx} filename =
 
 let solve ({r_ctx; r_cch} as r) =
   cc_handler_finalize (Option.value_exn r_cch ~here:_here_);
+  write_ctx r "/home/jorge/foo.lp";
   assert_ok _here_ (sCIPsolve r_ctx);
   let rval = result_of_status (sCIPgetStatus r_ctx) in
   (match rval with

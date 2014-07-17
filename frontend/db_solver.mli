@@ -36,7 +36,7 @@ sig
   val write_bg_ctx : ctx -> string -> unit
 
   val add_objective :
-    ctx -> (I.c, int) Db_logic.M.t ->
+    ctx -> (I.c, 's) Db_logic.M.t ->
     [> `Duplicate | `Ok | `Out_of_fragment]
 
 end
