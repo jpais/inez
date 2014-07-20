@@ -404,7 +404,7 @@ struct
     S.add_real_indicator r_ctx b_eq l_neg o;
     S.add_real_indicator r_ctx b_lt l Float.(neg o - 1.0);
     S.add_real_indicator r_ctx b_gt l_neg Float.(o - 1.0);
-    S.add_clause r_ctx [b_eq; b_lt; b_eq];
+    S.add_clause r_ctx [b_eq; b_lt; b_gt];
     S_Pos (Some b)
 
   and blast_eq ({r_ctx} as r) s =
@@ -418,7 +418,7 @@ struct
     S.add_indicator r_ctx b_eq l_neg o;
     S.add_indicator r_ctx b_lt l Int63.(neg o - one);
     S.add_indicator r_ctx b_gt l_neg Int63.(o - one);
-    S.add_clause r_ctx [b_eq; b_lt; b_eq];
+    S.add_clause r_ctx [b_eq; b_lt; b_gt];
     S_Pos (Some b)
 
   and var_of_app ({r_ctx; r_call_m} as r) f_id l t =
